@@ -38,6 +38,7 @@ public class MainActivity extends Activity {
     private static final String KEY_URL = "url";
 
     private WebView web;
+    private String lastError = "";
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -101,7 +102,7 @@ public class MainActivity extends Activity {
                     return;
                 }
                 prefs().edit().putString(KEY_URL, value).apply();
-                recreate();
+                showWeb(value, null);
             }
         });
 
@@ -154,7 +155,29 @@ public class MainActivity extends Activity {
             @Override
             public void onReceivedError(WebView view, WebResourceRequest request,
                                         android.webkit.WebResourceError error) {
-                if (request.isForMainFrame()) showNotFound(base);
+                if (request.isForMainFrame()) {
+                    lastError = "No responde: " + error.getDescription();
+                    showNotFound(base);
+                }
+            }
+
+            @Override
+            public void onReceivedHttpError(WebView view, WebResourceRequest request,
+                                            android.webkit.WebResourceResponse response) {
+                if (request.isForMainFrame()) {
+                    lastError = "El servidor respondió " + response.getStatusCode();
+                }
+            }
+        });
+
+        // si la web se queja, que quede apuntado para poder mirarlo desde el menú
+        web.setWebChromeClient(new android.webkit.WebChromeClient() {
+            @Override
+            public boolean onConsoleMessage(android.webkit.ConsoleMessage m) {
+                if (m.messageLevel() == android.webkit.ConsoleMessage.MessageLevel.ERROR) {
+                    lastError = m.message() + " (línea " + m.lineNumber() + ")";
+                }
+                return true;
             }
         });
 
@@ -169,8 +192,14 @@ public class MainActivity extends Activity {
 
         setContentView(web);
 
-        if (state != null) web.restoreState(state);
-        else web.loadUrl(url);
+        // Ojo: restoreState devuelve null cuando no hay nada que restaurar (por
+        // ejemplo al volver de la pantalla de la dirección). Si no se mira, la
+        // aplicación se queda en blanco sin haber cargado nunca la página.
+        boolean restored = false;
+        if (state != null) {
+            restored = web.restoreState(state) != null;
+        }
+        if (!restored) web.loadUrl(url);
     }
 
     private void showNotFound(final String url) {
@@ -206,6 +235,7 @@ public class MainActivity extends Activity {
     public boolean onCreateOptionsMenu(android.view.Menu menu) {
         menu.add(0, 1, 0, "Recargar");
         menu.add(0, 2, 0, "Cambiar dirección");
+        menu.add(0, 3, 0, "¿Qué ha fallado?");
         return true;
     }
 
@@ -214,6 +244,21 @@ public class MainActivity extends Activity {
         if (item.getItemId() == 1 && web != null) { web.reload(); return true; }
         if (item.getItemId() == 2) {
             showSetup(prefs().getString(KEY_URL, ""));
+            return true;
+        }
+        if (item.getItemId() == 3) {
+            String url = prefs().getString(KEY_URL, "(sin dirección)");
+            new AlertDialog.Builder(this)
+                    .setTitle("Diagnóstico")
+                    .setMessage("Dirección: " + url
+                            + "\n\nÚltimo fallo: "
+                            + (lastError.isEmpty() ? "ninguno" : lastError)
+                            + "\n\nSi la pantalla sale en blanco, prueba a recargar. "
+                            + "Si sigue, abre esa misma dirección en Chrome para ver si el "
+                            + "servidor responde.")
+                    .setPositiveButton("Recargar", (d, w) -> { if (web != null) web.reload(); })
+                    .setNegativeButton("Cerrar", null)
+                    .show();
             return true;
         }
         return super.onOptionsItemSelected(item);

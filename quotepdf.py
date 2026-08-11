@@ -82,7 +82,8 @@ def build(quote, business, profile_name='', attachments=None):
     y = _device(pdf, quote, y)
     y = _lines_table(pdf, quote, y)
     y = _totals(pdf, sums, y)
-    y = _notes(pdf, quote, business, y, attachments)
+    y = _notes(pdf, quote, business, y)
+    _attachments(pdf, attachments)
     _footer(pdf, business)
 
     return pdf.build()
@@ -262,20 +263,13 @@ def _totals(pdf, sums, y):
     return y - height - 10
 
 
-def _notes(pdf, quote, business, y, attachments=None):
-    """Notas, informe de diagnóstico y condiciones."""
+def _notes(pdf, quote, business, y):
+    """Notas y condiciones."""
     blocks = []
     if _txt(quote.get('notes')):
         blocks.append(('Notas', _txt(quote.get('notes'))))
 
-    # Si la ficha lleva un informe de diagnóstico, que conste en el papel
-    reports = [f for f in (attachments or []) if f.get('kind') == 'diagnostico']
-    if reports:
-        listado = '; '.join('%s (%s)' % (_txt(f.get('name')), _txt(f.get('uploadedAt')))
-                            for f in reports[:3])
-        blocks.append(('Diagnóstico',
-                       'Se entrega junto a este presupuesto el informe de diagnóstico del '
-                       'equipo: ' + listado + '.'))
+
     terms = _txt(business.get('terms')) or (
         'Presupuesto sin compromiso. La reparación no empieza hasta que lo apruebes. '
         'Puede haber averías que sólo se ven al abrir el equipo: si aparece algo más, '
@@ -297,6 +291,43 @@ def _notes(pdf, quote, business, y, attachments=None):
         y -= 8
 
     return y
+
+
+def _attachments(pdf, attachments):
+    """Lo que se entrega con el presupuesto, abajo del todo.
+
+    Va anclado al pie en vez de seguir al texto: así aprovecha el hueco que
+    queda en presupuestos cortos y siempre se lee en el mismo sitio.
+    """
+    items = list(attachments or [])
+    if not items:
+        return
+
+    # primero los diagnósticos, que son los que importan
+    items.sort(key=lambda f: 0 if f.get('kind') == 'diagnostico' else 1)
+    items = items[:6]
+
+    top = 118 + 26 + 15 * len(items)          # justo encima de la línea del pie
+    pdf.rect(MARGIN, 118, CONTENT_W, top - 118, BAND, radius=6)
+
+    y = top - 20
+    pdf.text(MARGIN + 14, y, 'SE ENTREGA CON ESTE PRESUPUESTO', size=8, bold=True, color=FAINT)
+    y -= 16
+
+    for item in items:
+        es_diag = item.get('kind') == 'diagnostico'
+        etiqueta = 'Informe de diagnóstico' if es_diag else 'Adjunto'
+        nombre = _txt(item.get('name'))
+        fecha = _txt(item.get('uploadedAt'))
+
+        pdf.text(MARGIN + 14, y, '·', size=10, bold=True, color=BRAND if es_diag else SOFT)
+        pdf.text(MARGIN + 26, y, etiqueta, size=9,
+                 bold=es_diag, color=INK if es_diag else SOFT)
+        pdf.text(MARGIN + 26 + text_width(etiqueta, 9, es_diag) + 8, y, nombre,
+                 size=8.5, color=SOFT)
+        if fecha:
+            pdf.text(PAGE_W - MARGIN - 14, y, fecha, size=8.5, color=FAINT, align='right')
+        y -= 15
 
 
 def _footer(pdf, business):

@@ -249,22 +249,38 @@
     var list = S.profiles();
     var active = S.activeProfile();
 
-    el('profile-select').innerHTML = list.map(function (p) {
-      return '<option value="' + esc(p.id) + '"' + (active && p.id === active.id ? ' selected' : '') + '>' +
-        esc(p.name) + '</option>';
+    // agrupados por tipo, que con cuatro puestos se agradece
+    var groups = S.PROFILE_KINDS.map(function (kind) {
+      var mine = list.filter(function (p) { return S.profileKind(p).id === kind.id; });
+      if (!mine.length) return '';
+      var options = mine.map(function (p) {
+        return '<option value="' + esc(p.id) + '"' +
+          (active && p.id === active.id ? ' selected' : '') + '>' + esc(p.name) + '</option>';
+      }).join('');
+      return '<optgroup label="' + esc(kind.icon + ' ' + kind.label) + '">' + options + '</optgroup>';
     }).join('');
+    el('profile-select').innerHTML = groups;
 
     var target = el('profile-list');
     if (!target) return;
+
+    // los puestos los monta y los quita el dueño
+    var auth = S.auth ? S.auth() : { enabled: false };
+    var manda = !auth.enabled || !auth.user || auth.user.role === 'dueño';
+    el('profile-new').hidden = !manda;
+
     target.innerHTML = list.map(function (p) {
       var isActive = active && p.id === active.id;
+      var kind = S.profileKind(p);
       return '<li data-profile="' + esc(p.id) + '">' +
         '<div class="mini-main">' +
-          '<div class="mini-title">' + esc(p.name) + (isActive ? ' <span class="tag">en uso</span>' : '') + '</div>' +
-          '<div class="mini-sub">' + (p.createdAt ? 'creado el ' + esc(dateLabel(p.createdAt)) : '') + '</div>' +
+          '<div class="mini-title">' + kind.icon + ' ' + esc(p.name) +
+            (isActive ? ' <span class="tag">en uso</span>' : '') + '</div>' +
+          '<div class="mini-sub">' + esc(kind.label) +
+            (p.createdAt ? ' · desde el ' + esc(dateLabel(p.createdAt)) : '') + '</div>' +
         '</div>' +
-        '<button type="button" class="btn sm" data-action="rename">Renombrar</button>' +
-        (list.length > 1 ? '<button type="button" class="btn sm btn-danger-ghost" data-action="delete">Borrar</button>' : '') +
+        (manda ? '<button type="button" class="btn sm" data-action="rename">Cambiar</button>' : '') +
+        (manda && list.length > 1 ? '<button type="button" class="btn sm btn-danger-ghost" data-action="delete">Borrar</button>' : '') +
       '</li>';
     }).join('');
   }

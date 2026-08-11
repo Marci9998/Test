@@ -66,8 +66,8 @@ identificarse; sin eso no se ve ni una ficha.
 - ¿Se te olvidó la contraseña? Borra `/var/lib/taller/users.json` y al abrir volverá a
   salir la pantalla de «Hola» para crear cuenta otra vez. Las fichas no se tocan.
 
-Las **cuentas** son para entrar. Los **perfiles** son cajones de fichas: quien entra los ve
-todos. No son cosas distintas por descuido, es a propósito: un taller pequeño con dos manos.
+Las **cuentas** son para entrar; los **puestos** son los talleres (móviles, PCs…). Cada
+cuenta entra sólo a los puestos que tenga marcados — mira más abajo.
 
 > ⚠️ La conexión va por http, sin cifrar: dentro de tu red de casa o del taller está bien,
 > pero no dejes esa dirección abierta a internet.
@@ -181,8 +181,9 @@ resguardo… Se guardan en el servidor junto a la ficha, en `/var/lib/taller/fil
   marca solo como **diagnóstico**; en la lista de fichas verás un 📄 para saber de un
   vistazo cuáles lo llevan.
 - **Abrir** enseña el PDF en una pestaña (para reenviarlo por WhatsApp, por ejemplo).
-- Cuando hagas el presupuesto desde esa ficha, el PDF incluye un apartado
-  **Diagnóstico** diciendo que se entrega el informe, con su nombre y su fecha.
+- Cuando hagas el presupuesto desde esa ficha, el PDF lista abajo del todo, en
+  **«Se entrega con este presupuesto»**, el informe y los demás adjuntos con su fecha
+  (va anclado al pie, así aprovecha el hueco de los presupuestos cortos).
 - Al borrar una ficha, sus adjuntos se borran con ella (no se quedan ocupando disco).
 - Como todo lo demás, sin haber entrado con tu cuenta no se pueden ni ver ni descargar.
 
@@ -210,15 +211,28 @@ y sale en todos los presupuestos. Los estados son Borrador · Enviado · Aceptad
 
 > El PDF necesita el servidor. Si abres la web como fichero suelto, el botón te lo dice.
 
-### Perfiles
+### Varios puestos en un mismo servidor
 
-Cada perfil tiene sus propias fichas y sus propios números: útil para separar el taller de
-tus cosas, o si lleváis dos negocios. Se cambia con el desplegable de arriba a la derecha y
-se administran en **Datos → Perfiles**. Al borrar un perfil, sus fichas se guardan por si
-acaso en `/var/lib/taller/backups/`.
+Un servidor lleva todos tus puestos sin que se mezcle nada: **Móviles 1**, **Móviles 2**,
+**PCs 1**, **PCs 2**… Cada puesto tiene sus fichas, sus presupuestos, sus adjuntos y sus
+números por separado, y se cambia de puesto con el desplegable de arriba a la derecha
+(aparecen agrupados por tipo: 📱 Móviles, 💻 PCs, 🧰 Otro).
 
-No son cuentas con contraseña: son cajones separados, y cualquiera que entre puede cambiar
-de cajón.
+Quién ve qué:
+
+| | Dueño (admin) | Ayudante |
+|---|---|---|
+| Puestos que ve | todos | sólo los que le marques |
+| Crear, renombrar y borrar puestos | sí | no |
+| Dar y quitar accesos | sí | no |
+
+Se administra en **Datos → Puestos** y **Datos → Tu cuenta → Dar acceso a alguien**: creas
+la cuenta, eliges si es ayudante o dueño y marcas sus puestos. El botón **Acceso** de cada
+cuenta permite cambiárselos después.
+
+El candado no es sólo de pantalla: si alguien intenta pedir por la API las fichas de un
+puesto que no es suyo, el servidor responde 403. Al borrar un puesto, sus fichas se guardan
+por si acaso en `/var/lib/taller/backups/`.
 
 ## Traer tu Excel
 

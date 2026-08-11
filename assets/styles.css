@@ -718,6 +718,25 @@ body.is-locked, body.is-booting { overflow: hidden; }
 #profile-list li { gap: 8px; cursor: default; }
 #profile-list .mini-title .tag { margin-left: 4px; vertical-align: 1px; }
 
+/* ───────────────────────── Accesos por puesto ───────────────────────── */
+.access-list { display: grid; gap: 6px; }
+.access-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  font-size: 14px;
+  color: var(--text);
+  cursor: pointer;
+}
+.access-row:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.access-row input { width: auto; margin: 0; }
+.access-row span { flex: 1; font-weight: 550; }
+.access-row small { color: var(--text-faint); font-size: 12px; }
+
 /* ───────────────────────── Ajustes de tiendas ───────────────────────── */
 .shop-settings { display: grid; gap: 8px; }
 .shop-row {

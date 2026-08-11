@@ -331,8 +331,15 @@
   function openProfileModal(id) {
     editingProfile = id;
     var profile = id ? S.profiles().filter(function (p) { return p.id === id; })[0] : null;
-    el('profile-modal-title').textContent = profile ? 'Renombrar perfil' : 'Nuevo perfil';
+    el('profile-modal-title').textContent = profile ? 'Cambiar puesto' : 'Nuevo puesto';
     el('profile-name').value = profile ? profile.name : '';
+
+    var kind = profile ? S.profileKind(profile).id : 'moviles';
+    el('profile-kind').innerHTML = S.PROFILE_KINDS.map(function (k) {
+      return '<option value="' + k.id + '"' + (k.id === kind ? ' selected' : '') + '>' +
+        k.icon + '  ' + U.esc(k.label) + '</option>';
+    }).join('');
+
     el('profile-modal').hidden = false;
     setTimeout(function () { el('profile-name').focus(); }, 50);
   }
@@ -346,9 +353,10 @@
     var name = el('profile-name').value.trim();
     if (!name) return U.toast('Ponle un nombre');
 
+    var kind = el('profile-kind').value;
     var action = editingProfile
-      ? S.renameProfile(editingProfile, name)
-      : S.createProfile(name).then(function (profile) { return S.setActiveProfile(profile.id); });
+      ? S.renameProfile(editingProfile, name, kind)
+      : S.createProfile(name, kind).then(function (profile) { return S.setActiveProfile(profile.id); });
 
     action.then(function () {
       closeProfileModal();
@@ -552,7 +560,11 @@
 
     el('profile-new').addEventListener('click', function () { openProfileModal(null); });
 
-    el('account-new').addEventListener('click', newAccount);
+    el('account-new').addEventListener('click', function () { openAccountModal(null); });
+    el('account-modal-close').addEventListener('click', closeAccountModal);
+    el('account-cancel').addEventListener('click', closeAccountModal);
+    el('account-save').addEventListener('click', saveAccount);
+    el('account-role').addEventListener('change', applyAccountRole);
 
     el('account-logout').addEventListener('click', function () {
       if (!confirm('¿Salir de la cuenta?')) return;
@@ -563,6 +575,13 @@
     });
 
     el('account-list').addEventListener('click', function (e) {
+      var edit = e.target.closest('button[data-edit]');
+      if (edit) {
+        var who = accounts.filter(function (u) { return u.id === edit.dataset.edit; })[0];
+        if (who) openAccountModal(who);
+        return;
+      }
+
       var button = e.target.closest('button[data-user]');
       if (!button) return;
       if (!confirm('¿Quitarle el acceso a esta persona?')) return;
@@ -663,6 +682,7 @@
       if (e.key === 'Escape') {
         if (!el('csv-modal').hidden) el('csv-modal').hidden = true;
         else if (!el('profile-modal').hidden) closeProfileModal();
+        else if (!el('account-modal').hidden) closeAccountModal();
         else if (Quotes.isOpen()) Quotes.close(false);
         else if (!el('drawer').hidden) closeDrawer(false);
         else if (Shop.isOpen()) Shop.close();
@@ -763,6 +783,8 @@
   }
 
   /* ── Cuentas (pestaña Datos) ─────────────────────────────── */
+  var accounts = [];
+
   function renderAccount() {
     var auth = S.auth();
     var card = el('account-card');
@@ -774,30 +796,107 @@
     el('account-new').hidden = !isOwner;
 
     S.users().then(function (list) {
+      accounts = list;
       el('account-list').innerHTML = list.map(function (u) {
         var self = u.id === auth.user.id;
+        var donde = u.role === 'dueño' ? 'todos los puestos'
+          : (u.profiles || []).map(function (id) {
+              var p = S.profiles().filter(function (x) { return x.id === id; })[0];
+              return p ? S.profileKind(p).icon + ' ' + p.name : null;
+            }).filter(Boolean).join(', ') || 'ningún puesto todavía';
+
         return '<li>' +
           '<div class="mini-main">' +
             '<div class="mini-title">' + U.esc(u.name) + (self ? ' <span class="tag">tú</span>' : '') + '</div>' +
-            '<div class="mini-sub">' + U.esc(u.login) + ' · ' + U.esc(u.role) + '</div>' +
+            '<div class="mini-sub">' + U.esc(u.login) + ' · ' + U.esc(u.role) + ' · ' + U.esc(donde) + '</div>' +
           '</div>' +
+          (isOwner ? '<button class="btn sm" data-edit="' + U.esc(u.id) + '">Acceso</button>' : '') +
           (isOwner && !self ? '<button class="btn sm btn-danger-ghost" data-user="' + U.esc(u.id) + '">Quitar</button>' : '') +
         '</li>';
       }).join('');
     }).catch(function () { /* si no se puede, la tarjeta se queda con lo básico */ });
   }
 
-  function newAccount() {
-    var name = prompt('Nombre de la persona:');
-    if (name === null) return;
-    var login = prompt('Usuario con el que entrará (letras y números):');
-    if (login === null) return;
-    var password = prompt('Contraseña para esa cuenta (mínimo 6):');
-    if (password === null) return;
+  var editingAccount = null;
 
-    S.register({ name: name, login: login, password: password, role: 'ayudante' })
-      .then(function () { renderAccount(); U.toast('Cuenta creada'); })
-      .catch(function (err) { alert(err.message); });
+  function openAccountModal(user) {
+    editingAccount = user || null;
+    el('account-modal-title').textContent = user ? 'Cambiar acceso' : 'Dar acceso a alguien';
+    el('account-name').value = user ? user.name : '';
+    el('account-login').value = user ? user.login : '';
+    el('account-password').value = '';
+    el('account-role').value = user ? user.role : 'ayudante';
+    el('account-error').hidden = true;
+
+    // al editar no se cambia el usuario ni la contraseña
+    el('account-login-field').hidden = !!user;
+    el('account-password-field').hidden = !!user;
+
+    var mine = (user && user.profiles) || [];
+    el('account-profiles').innerHTML = S.profiles().map(function (p) {
+      var kind = S.profileKind(p);
+      return '<label class="access-row">' +
+        '<input type="checkbox" value="' + U.esc(p.id) + '"' +
+          (mine.indexOf(p.id) > -1 ? ' checked' : '') + '>' +
+        '<span>' + kind.icon + ' ' + U.esc(p.name) + '</span>' +
+        '<small>' + U.esc(kind.label) + '</small>' +
+      '</label>';
+    }).join('');
+
+    applyAccountRole();
+    el('account-modal').hidden = false;
+    setTimeout(function () { el(user ? 'account-name' : 'account-name').focus(); }, 50);
+  }
+
+  /* Al dueño no se le marcan puestos: los ve todos por definición */
+  function applyAccountRole() {
+    el('account-profiles-field').hidden = el('account-role').value === 'dueño';
+  }
+
+  function closeAccountModal() {
+    el('account-modal').hidden = true;
+    editingAccount = null;
+  }
+
+  function saveAccount() {
+    var role = el('account-role').value;
+    var chosen = Array.prototype.filter.call(
+      el('account-profiles').querySelectorAll('input:checked'),
+      function () { return true; }
+    ).map(function (input) { return input.value; });
+
+    var fields = {
+      name: el('account-name').value.trim(),
+      role: role,
+      profiles: role === 'dueño' ? [] : chosen
+    };
+
+    if (!editingAccount && role !== 'dueño' && !chosen.length) {
+      return accountError('Márcale al menos un puesto, si no no verá nada.');
+    }
+
+    var action;
+    if (editingAccount) {
+      action = S.updateUser(editingAccount.id, fields);
+    } else {
+      fields.login = el('account-login').value.trim().toLowerCase();
+      fields.password = el('account-password').value;
+      if (!fields.login) return accountError('Ponle un usuario para entrar.');
+      if (fields.password.length < 6) return accountError('La contraseña necesita 6 caracteres o más.');
+      action = S.register(fields);
+    }
+
+    action.then(function () {
+      closeAccountModal();
+      renderAccount();
+      U.toast(editingAccount ? 'Acceso cambiado' : 'Cuenta creada');
+    }).catch(function (err) { accountError(err.message); });
+  }
+
+  function accountError(message) {
+    var node = el('account-error');
+    node.textContent = message;
+    node.hidden = false;
   }
 
   /* ── Arranque ────────────────────────────────────────────── */
@@ -820,8 +919,22 @@
     showView(['panel', 'fichas', 'datos'].indexOf(view) > -1 ? view : 'panel');
   }
 
+  /* Si algo se atasca al arrancar, la pantalla se queda en blanco (la
+     aplicación está oculta hasta que se sabe si hay que entrar). Esto la
+     destapa igualmente y cuenta lo que pasa, que desde el móvil no hay
+     forma de mirar la consola. */
+  function bootWatchdog() {
+    setTimeout(function () {
+      if (!document.body.classList.contains('is-booting')) return;
+      revealApp();
+      U.toast('El servidor tarda en contestar. Prueba a recargar.');
+      console.warn('El arranque no terminó a tiempo');
+    }, 12000);
+  }
+
   function init() {
     initTheme();
+    bootWatchdog();
     S.onError(function (message) {
       if (/Entra con tu cuenta/i.test(message)) return showWelcome('login');
       U.toast(message);
@@ -857,8 +970,11 @@
     }).catch(function (err) {
       console.error(err);
       revealApp();
+      el('welcome').hidden = true;
+      el('offline').hidden = true;
       document.body.insertAdjacentHTML('afterbegin',
-        '<p class="empty">No se pudieron cargar los datos: ' + U.esc(err.message) + '</p>');
+        '<p class="empty">No se pudo arrancar: ' + U.esc(err.message || err) +
+        '<br><button class="btn" onclick="location.reload()" style="margin-top:12px">Reintentar</button></p>');
     });
   }
 

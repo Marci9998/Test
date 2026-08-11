@@ -39,6 +39,7 @@ DEFAULT_PORT = 8477          # 8083 lo deja libre a propósito (lo usan otros pa
 COOKIE_NAME = 'taller_sesion'
 SESSION_DAYS = 30
 PBKDF2_ROUNDS = 210000
+PROFILE_KINDS = ('moviles', 'pcs', 'otro')
 FORBIDDEN_PORTS = {8083}
 MAX_BODY = 8 * 1024 * 1024   # 8 MB de fichas es muchísimo; corta ahí
 MAX_UPLOAD = 25 * 1024 * 1024   # los informes de diagnóstico y las fotos sí pesan
@@ -116,12 +117,13 @@ class Storage:
     def save_profiles(self, profiles):
         self._write_json(self.profiles_path, profiles)
 
-    def create_profile(self, name):
+    def create_profile(self, name, kind='moviles'):
         name = (name or '').strip() or 'Taller'
         profiles = self.profiles()
         profile = {
             'id': uuid.uuid4().hex[:12],
             'name': name[:60],
+            'kind': kind if kind in PROFILE_KINDS else 'moviles',
             'createdAt': time.strftime('%Y-%m-%d'),
         }
         profiles.append(profile)
@@ -129,11 +131,13 @@ class Storage:
         self._write_json(self._ticket_path(profile['id']), [])
         return profile
 
-    def rename_profile(self, profile_id, name):
+    def rename_profile(self, profile_id, name, kind=None):
         profiles = self.profiles()
         for profile in profiles:
             if profile['id'] == profile_id:
                 profile['name'] = (name or '').strip()[:60] or profile['name']
+                if kind in PROFILE_KINDS:
+                    profile['kind'] = kind
                 self.save_profiles(profiles)
                 return profile
         return None
@@ -305,7 +309,22 @@ class Storage:
                 return user
         return None
 
-    def create_user(self, name, login, password, role='dueño'):
+    def set_user_access(self, user_id, profiles=None, name=None, role=None):
+        users = self.users()
+        for user in users:
+            if user['id'] != user_id:
+                continue
+            if profiles is not None:
+                user['profiles'] = [p for p in profiles if isinstance(p, str)]
+            if name:
+                user['name'] = str(name).strip()[:60] or user['name']
+            if role in ('dueño', 'ayudante'):
+                user['role'] = role
+            self.save_users(users)
+            return user
+        return None
+
+    def create_user(self, name, login, password, role='dueño', profiles=None):
         login = (login or '').strip().lower()
         if not re.fullmatch(r'[a-z0-9._-]{3,32}', login or ''):
             raise ValueError('El usuario admite de 3 a 32 letras, números, punto, guion o guion bajo.')
@@ -320,6 +339,7 @@ class Storage:
             'name': (name or '').strip()[:60] or login,
             'login': login,
             'role': role,
+            'profiles': list(profiles or []),      # vacío en el dueño: lo ve todo
             'createdAt': time.strftime('%Y-%m-%d'),
         }
         user.update(hash_password(password))
@@ -494,7 +514,24 @@ class Handler(BaseHTTPRequestHandler):
     @staticmethod
     def public_user(user):
         return {'id': user['id'], 'name': user['name'],
-                'login': user['login'], 'role': user.get('role', 'dueño')}
+                'login': user['login'], 'role': user.get('role', 'dueño'),
+                'profiles': list(user.get('profiles') or [])}
+
+    @staticmethod
+    def can_access(user, profile_id):
+        """El dueño ve todos los puestos; los demás, sólo los suyos."""
+        if not user:
+            return False
+        if user.get('role') == 'dueño':
+            return True
+        return profile_id in (user.get('profiles') or [])
+
+    def visible_profiles(self, user):
+        profiles = self.storage.profiles()
+        if not user or user.get('role') == 'dueño':
+            return profiles
+        allowed = set(user.get('profiles') or [])
+        return [p for p in profiles if p['id'] in allowed]
 
     def _set_session_cookie(self, token):
         self._extra_headers['Set-Cookie'] = (
@@ -520,7 +557,8 @@ class Handler(BaseHTTPRequestHandler):
                 if not current or current.get('role') != 'dueño':
                     return self._error(403, 'Sólo el dueño puede crear más cuentas.')
                 user = storage.create_user(body.get('name'), body.get('login'),
-                                           body.get('password'), body.get('role') or 'ayudante')
+                                           body.get('password'), body.get('role') or 'ayudante',
+                                           body.get('profiles'))
                 return self._json(self.public_user(user), 201)
 
             user = storage.create_user(body.get('name'), body.get('login'),
@@ -554,6 +592,16 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json([self.public_user(u) for u in users])
             return self._error(405, 'Método no permitido')
 
+        if len(parts) == 3 and parts[:2] == ['auth', 'users'] and method == 'PATCH':
+            current = self.current_user()
+            if not current or current.get('role') != 'dueño':
+                return self._error(403, 'Sólo el dueño puede cambiar accesos.')
+            body = self._body() or {}
+            user = storage.set_user_access(safe_id(parts[2]), body.get('profiles'),
+                                           body.get('name'), body.get('role'))
+            return self._json(self.public_user(user)) if user \
+                else self._error(404, 'No existe esa cuenta.')
+
         if len(parts) == 3 and parts[:2] == ['auth', 'users'] and method == 'DELETE':
             current = self.current_user()
             if not current or current.get('role') != 'dueño':
@@ -578,24 +626,38 @@ class Handler(BaseHTTPRequestHandler):
             return handled
 
         # Del resto no se ve nada sin haber entrado
-        if self.storage.users() and not self.current_user():
+        current = self.current_user()
+        if self.storage.users() and not current:
             return self._error(401, 'Entra con tu cuenta.')
+
+        # …ni de un puesto que no sea tuyo
+        if len(parts) >= 2 and parts[0] == 'profiles' and self.storage.users():
+            if not self.can_access(current, safe_id(parts[1])):
+                return self._error(403, 'Ese puesto no es tuyo.')
 
         if parts == ['profiles']:
             if method == 'GET':
-                return self._json(self.storage.profiles())
+                return self._json(self.visible_profiles(self.current_user()))
             if method == 'POST':
+                user = self.current_user()
+                if self.storage.users() and (not user or user.get('role') != 'dueño'):
+                    return self._error(403, 'Sólo el dueño puede crear puestos.')
                 body = self._body() or {}
-                return self._json(self.storage.create_profile(body.get('name')), 201)
+                return self._json(self.storage.create_profile(body.get('name'),
+                                                              body.get('kind')), 201)
             return self._error(405, 'Método no permitido')
 
         if len(parts) == 2 and parts[0] == 'profiles':
             profile_id = safe_id(parts[1])
             if method == 'PATCH':
                 body = self._body() or {}
-                profile = self.storage.rename_profile(profile_id, body.get('name'))
+                profile = self.storage.rename_profile(profile_id, body.get('name'),
+                                                      body.get('kind'))
                 return self._json(profile) if profile else self._error(404, 'No existe ese perfil')
             if method == 'DELETE':
+                user = self.current_user()
+                if self.storage.users() and (not user or user.get('role') != 'dueño'):
+                    return self._error(403, 'Sólo el dueño puede borrar puestos.')
                 ok = self.storage.delete_profile(profile_id)
                 return self._json({'ok': True}) if ok else self._error(404, 'No existe ese perfil')
             return self._error(405, 'Método no permitido')

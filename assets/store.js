@@ -242,6 +242,10 @@
 
   function deleteUser(id) { return api('/auth/users/' + id, { method: 'DELETE' }); }
 
+  function updateUser(id, fields) {
+    return api('/auth/users/' + id, { method: 'PATCH', body: fields });
+  }
+
   /* ── Perfiles ────────────────────────────────────────────── */
   var profiles = [];
   var activeId = null;
@@ -267,32 +271,52 @@
     });
   }
 
-  function createProfile(name) {
+  var PROFILE_KINDS = [
+    { id: 'moviles', label: 'Móviles', icon: '📱' },
+    { id: 'pcs',     label: 'PCs',     icon: '💻' },
+    { id: 'otro',    label: 'Otro',    icon: '🧰' }
+  ];
+
+  function profileKind(profile) {
+    var id = (profile && profile.kind) || 'moviles';
+    for (var i = 0; i < PROFILE_KINDS.length; i++) if (PROFILE_KINDS[i].id === id) return PROFILE_KINDS[i];
+    return PROFILE_KINDS[0];
+  }
+
+  function createProfile(name, kind) {
     if (!remote) {
-      var profile = { id: uid().slice(0, 12), name: (name || 'Taller').trim().slice(0, 60), createdAt: today() };
+      var profile = { id: uid().slice(0, 12), name: (name || 'Taller').trim().slice(0, 60),
+                      kind: kind || 'moviles', createdAt: today() };
       profiles.push(profile);
       lsSet(PROFILES_KEY, profiles);
       lsSet(TICKETS_KEY + profile.id, []);
       return Promise.resolve(profile);
     }
-    return api('/profiles', { method: 'POST', body: { name: name } }).then(function (profile) {
+    return api('/profiles', { method: 'POST', body: { name: name, kind: kind } }).then(function (profile) {
       profiles.push(profile);
       return profile;
     });
   }
 
-  function renameProfile(id, name) {
+  function renameProfile(id, name, kind) {
     name = (name || '').trim().slice(0, 60);
     if (!name) return Promise.resolve(null);
+
+    function apply() {
+      profiles.forEach(function (p) {
+        if (p.id !== id) return;
+        p.name = name;
+        if (kind) p.kind = kind;
+      });
+    }
+
     if (!remote) {
-      profiles.forEach(function (p) { if (p.id === id) p.name = name; });
+      apply();
       lsSet(PROFILES_KEY, profiles);
       return Promise.resolve(true);
     }
-    return api('/profiles/' + id, { method: 'PATCH', body: { name: name } }).then(function () {
-      profiles.forEach(function (p) { if (p.id === id) p.name = name; });
-      return true;
-    });
+    return api('/profiles/' + id, { method: 'PATCH', body: { name: name, kind: kind } })
+      .then(function () { apply(); return true; });
   }
 
   function deleteProfile(id) {
@@ -686,6 +710,9 @@
     logout: logout,
     users: users,
     deleteUser: deleteUser,
+    updateUser: updateUser,
+    PROFILE_KINDS: PROFILE_KINDS,
+    profileKind: profileKind,
     onError: function (fn) { onError = fn || function () {}; },
     flush: flush,
 

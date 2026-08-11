@@ -205,13 +205,15 @@
 
     <article class="card">
       <header class="card-head">
-        <h2>Perfiles</h2>
-        <small>separa talleres, socios o tus cosas personales</small>
+        <h2>Puestos</h2>
+        <small>móviles, PCs… cada uno por su lado</small>
       </header>
-      <p class="hint">Cada perfil tiene sus propias fichas y sus propios números. El perfil se elige arriba a la derecha.</p>
+      <p class="hint">Cada puesto (Móviles 1, PCs 2…) tiene sus propias fichas, sus presupuestos y
+        sus números, sin mezclarse. Se cambia de puesto arriba a la derecha. El dueño los ve todos;
+        a cada ayudante le marcas en qué puestos entra.</p>
       <ul id="profile-list" class="mini-list"></ul>
       <div class="row-btns" style="margin-top:12px">
-        <button class="btn" id="profile-new">+ Nuevo perfil</button>
+        <button class="btn" id="profile-new">+ Nuevo puesto</button>
       </div>
     </article>
 
@@ -615,13 +617,59 @@
       </button>
     </header>
     <div class="modal-body">
-      <label>Nombre del perfil
-        <input id="profile-name" placeholder="Taller de casa, Tienda, Personal…" maxlength="60">
+      <label>Nombre del puesto
+        <input id="profile-name" placeholder="Móviles 1, PCs 2, Tienda…" maxlength="60">
+      </label>
+      <label style="margin-top:12px">Qué se arregla aquí
+        <select id="profile-kind"></select>
       </label>
     </div>
     <footer class="modal-foot">
       <button class="btn" id="profile-cancel">Cancelar</button>
       <button class="btn btn-primary" id="profile-save">Guardar</button>
+    </footer>
+  </div>
+</div>
+
+<!-- ─────────────── CUENTA ─────────────── -->
+<div id="account-modal" class="modal" hidden>
+  <div class="modal-card">
+    <header class="card-head">
+      <h2 id="account-modal-title">Dar acceso a alguien</h2>
+      <button class="icon-btn" id="account-modal-close" aria-label="Cerrar">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.4 5 5 6.4 10.6 12 5 17.6 6.4 19 12 13.4 17.6 19 19 17.6 13.4 12 19 6.4 17.6 5 12 10.6 6.4 5Z"/></svg>
+      </button>
+    </header>
+    <div class="modal-body">
+      <div class="grid-2">
+        <label>Nombre
+          <input id="account-name" placeholder="Nombre de la persona" maxlength="60">
+        </label>
+        <label id="account-login-field">Usuario
+          <input id="account-login" placeholder="ayudante" autocapitalize="none" spellcheck="false">
+        </label>
+        <label class="col-2" id="account-password-field">Contraseña
+          <input id="account-password" type="password" placeholder="mínimo 6 caracteres"
+                 autocomplete="new-password">
+        </label>
+        <label class="col-2">Papel
+          <select id="account-role">
+            <option value="ayudante">Ayudante — sólo los puestos que le marques</option>
+            <option value="dueño">Dueño — lo ve y lo cambia todo</option>
+          </select>
+        </label>
+      </div>
+
+      <div id="account-profiles-field">
+        <p class="hint" style="margin:14px 0 8px">A qué puestos entra:</p>
+        <div id="account-profiles" class="access-list"></div>
+      </div>
+
+      <p class="welcome-error" id="account-error" hidden></p>
+    </div>
+    <footer class="modal-foot">
+      <button class="btn" id="account-cancel">Cancelar</button>
+      <button class="btn btn-primary" id="account-save">Guardar</button>
     </footer>
   </div>
 </div>
