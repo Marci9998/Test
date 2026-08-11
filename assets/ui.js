@@ -224,15 +224,70 @@
       '<input class="part-name" list="dl-parts" placeholder="Pantalla, batería…" value="' + esc(part.name) + '">' +
       '<input class="part-qty" type="text" inputmode="numeric" value="' + esc(part.qty) + '" aria-label="Cantidad">' +
       '<input class="part-cost" type="text" inputmode="decimal" value="' + esc(part.unitCost) + '" aria-label="Precio por unidad">' +
+      '<button type="button" class="part-search" title="Buscar esta pieza en las tiendas" aria-label="Buscar esta pieza">' +
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4a6 6 0 1 0 3.9 10.6l4.3 4.2 1.4-1.4-4.2-4.3A6 6 0 0 0 10 4Zm0 2a4 4 0 1 1 0 8 4 4 0 0 1 0-8Z"/></svg>' +
+      '</button>' +
       '<button type="button" class="part-del" aria-label="Quitar pieza">×</button>' +
     '</div>';
   }
 
   function renderParts(parts) {
-    var head = '<div class="parts-head"><span>Pieza</span><span>Uds</span><span>€/ud</span><span></span></div>';
+    var head = '<div class="parts-head"><span>Pieza</span><span>Uds</span><span>€/ud</span><span></span><span></span></div>';
     el('parts').innerHTML = head + (parts.length
       ? parts.map(partRow).join('')
       : '<p class="hint" style="margin:4px 0 0">Sin piezas todavía.</p>');
+  }
+
+  /* ── Perfiles ────────────────────────────────────────────── */
+  function renderProfiles() {
+    var list = S.profiles();
+    var active = S.activeProfile();
+
+    el('profile-select').innerHTML = list.map(function (p) {
+      return '<option value="' + esc(p.id) + '"' + (active && p.id === active.id ? ' selected' : '') + '>' +
+        esc(p.name) + '</option>';
+    }).join('');
+
+    var target = el('profile-list');
+    if (!target) return;
+    target.innerHTML = list.map(function (p) {
+      var isActive = active && p.id === active.id;
+      return '<li data-profile="' + esc(p.id) + '">' +
+        '<div class="mini-main">' +
+          '<div class="mini-title">' + esc(p.name) + (isActive ? ' <span class="tag">en uso</span>' : '') + '</div>' +
+          '<div class="mini-sub">' + (p.createdAt ? 'creado el ' + esc(dateLabel(p.createdAt)) : '') + '</div>' +
+        '</div>' +
+        '<button type="button" class="btn sm" data-action="rename">Renombrar</button>' +
+        (list.length > 1 ? '<button type="button" class="btn sm btn-danger-ghost" data-action="delete">Borrar</button>' : '') +
+      '</li>';
+    }).join('');
+  }
+
+  /* ── Ajustes de tiendas ──────────────────────────────────── */
+  function renderShopSettings() {
+    el('shop-settings').innerHTML = S.shops().map(function (shop, i) {
+      return '<div class="shop-row" data-shop="' + esc(shop.id) + '">' +
+        '<input class="shop-name" value="' + esc(shop.name) + '" placeholder="Nombre" aria-label="Nombre de la tienda">' +
+        '<input class="shop-url" value="' + esc(shop.url) + '" placeholder="https://…/buscar?q={q}" aria-label="Dirección de búsqueda">' +
+        '<label class="shop-popup"><input type="checkbox" class="shop-popup-box"' +
+          (shop.popup ? ' checked' : '') + '> ventana aparte</label>' +
+        '<button type="button" class="part-del" data-action="remove-shop" aria-label="Quitar tienda" ' +
+          'data-index="' + i + '">×</button>' +
+      '</div>';
+    }).join('');
+  }
+
+  /* ── Dónde se guardan los datos ──────────────────────────── */
+  function renderStorageInfo() {
+    var remote = S.isRemote();
+    el('storage-mode').textContent = remote ? 'servidor' : 'sólo este navegador';
+    el('storage-detail').innerHTML = remote
+      ? 'Estás conectado al servidor del Taller: las fichas se guardan en el equipo donde corre ' +
+        '<code>server.py</code>, así que las ves igual desde el móvil, la tablet o el ordenador. ' +
+        'El servidor hace una copia al día de cada perfil.'
+      : 'Has abierto la web como fichero suelto, así que las fichas se guardan sólo en este navegador ' +
+        'y no se ven desde otros dispositivos. Si quieres compartirlas, instala el servidor ' +
+        '(mira el README) o descarga copias desde aquí abajo.';
   }
 
   /* ── Select de estados ───────────────────────────────────── */
@@ -263,6 +318,9 @@
     renderSummary: renderSummary,
     renderParts: renderParts,
     renderStatusOptions: renderStatusOptions,
+    renderProfiles: renderProfiles,
+    renderShopSettings: renderShopSettings,
+    renderStorageInfo: renderStorageInfo,
     partRow: partRow,
     toast: toast,
     dateLabel: dateLabel

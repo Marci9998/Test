@@ -4,7 +4,7 @@
 (function (global) {
   'use strict';
 
-  var S = global.Store, C = global.CSV, U = global.UI;
+  var S = global.Store, C = global.CSV, U = global.UI, Shop = global.Shop;
   var el = U.el;
 
   var filter = { status: 'todos', query: '', sort: 'updated' };
@@ -34,6 +34,14 @@
     U.renderChips(filter.status);
     U.renderList(filter);
     U.renderSuggestions();
+    U.renderProfiles();
+  }
+
+  /* Texto que se manda al buscador de repuestos: modelo + pieza */
+  function searchTerms(partName) {
+    if (!current) return partName || '';
+    var device = [current.brand, current.model, current.storage].filter(Boolean).join(' ').trim();
+    return [device, partName || ''].filter(Boolean).join(' ').trim();
   }
 
   /* ── Navegación por pestañas ─────────────────────────────── */
@@ -74,6 +82,7 @@
 
     el('drawer').hidden = false;
     el('drawer-backdrop').hidden = false;
+    document.body.classList.add('drawer-open');
     document.body.style.overflow = 'hidden';
     setTimeout(function () {
       var first = el('ticket-form').querySelector('[name="model"]');
@@ -87,6 +96,7 @@
     }
     el('drawer').hidden = true;
     el('drawer-backdrop').hidden = true;
+    document.body.classList.remove('drawer-open');
     document.body.style.overflow = '';
     current = null;
   }
@@ -240,6 +250,54 @@
     U.toast(tickets.length + ' fichas importadas');
   }
 
+  /* ── Perfiles ────────────────────────────────────────────── */
+  var editingProfile = null;
+
+  function openProfileModal(id) {
+    editingProfile = id;
+    var profile = id ? S.profiles().filter(function (p) { return p.id === id; })[0] : null;
+    el('profile-modal-title').textContent = profile ? 'Renombrar perfil' : 'Nuevo perfil';
+    el('profile-name').value = profile ? profile.name : '';
+    el('profile-modal').hidden = false;
+    setTimeout(function () { el('profile-name').focus(); }, 50);
+  }
+
+  function closeProfileModal() {
+    el('profile-modal').hidden = true;
+    editingProfile = null;
+  }
+
+  function saveProfile() {
+    var name = el('profile-name').value.trim();
+    if (!name) return U.toast('Ponle un nombre');
+
+    var action = editingProfile
+      ? S.renameProfile(editingProfile, name)
+      : S.createProfile(name).then(function (profile) { return S.setActiveProfile(profile.id); });
+
+    action.then(function () {
+      closeProfileModal();
+      filter.status = 'todos';
+      refresh();
+      U.toast('Perfil guardado');
+    }).catch(function (err) { U.toast(err.message); });
+  }
+
+  /* ── Tiendas ─────────────────────────────────────────────── */
+  function saveShopSettings() {
+    var list = Array.prototype.map.call(el('shop-settings').querySelectorAll('.shop-row'), function (row) {
+      return {
+        id: row.dataset.shop,
+        name: row.querySelector('.shop-name').value.trim() || 'Tienda',
+        url: row.querySelector('.shop-url').value.trim(),
+        popup: row.querySelector('.shop-popup-box').checked
+      };
+    }).filter(function (shop) { return shop.url; });
+
+    S.saveShops(list);
+    Shop.renderSources();
+  }
+
   /* ── Fichas de ejemplo ───────────────────────────────────── */
   function loadDemo() {
     if (S.all().length && !confirm('Se añadirán 3 fichas de ejemplo a las que ya tienes. ¿Seguimos?')) return;
@@ -351,12 +409,90 @@
     });
 
     el('parts').addEventListener('click', function (e) {
-      if (!e.target.classList.contains('part-del')) return;
+      var row = e.target.closest('.part');
+      if (!row) return;
+
+      if (e.target.closest('.part-search')) {
+        syncFromForm();
+        var name = row.querySelector('.part-name').value;
+        Shop.open({ query: searchTerms(name) });
+        return;
+      }
+
+      if (!e.target.closest('.part-del')) return;
       syncFromForm();
-      var id = e.target.closest('.part').dataset.part;
+      var id = row.dataset.part;
       current.parts = current.parts.filter(function (p) { return p.id !== id; });
       U.renderParts(current.parts);
       U.renderSummary(current);
+    });
+
+    /* Buscador de repuestos */
+    el('shop-toggle').addEventListener('click', function () {
+      if (Shop.isOpen()) return Shop.close();
+      Shop.open(current ? { query: searchTerms('') } : {});
+    });
+
+    /* Perfiles */
+    el('profile-select').addEventListener('change', function () {
+      var id = this.value;
+      S.setActiveProfile(id).then(function () {
+        filter.status = 'todos';
+        refresh();
+        U.toast('Perfil: ' + S.activeProfile().name);
+      });
+    });
+
+    el('profile-new').addEventListener('click', function () { openProfileModal(null); });
+
+    el('profile-list').addEventListener('click', function (e) {
+      var button = e.target.closest('button[data-action]');
+      if (!button) return;
+      var id = button.closest('li').dataset.profile;
+      if (button.dataset.action === 'rename') return openProfileModal(id);
+
+      var profile = S.profiles().filter(function (p) { return p.id === id; })[0];
+      if (!profile) return;
+      if (!confirm('¿Borrar el perfil «' + profile.name + '» y todas sus fichas?')) return;
+      S.deleteProfile(id).then(function () {
+        refresh();
+        U.toast('Perfil borrado');
+      }).catch(function (err) { U.toast(err.message); });
+    });
+
+    el('profile-modal-close').addEventListener('click', closeProfileModal);
+    el('profile-cancel').addEventListener('click', closeProfileModal);
+    el('profile-save').addEventListener('click', saveProfile);
+    el('profile-name').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); saveProfile(); }
+    });
+
+    /* Tiendas de repuestos */
+    el('shop-settings').addEventListener('input', saveShopSettings);
+    el('shop-settings').addEventListener('change', saveShopSettings);
+
+    el('shop-settings').addEventListener('click', function (e) {
+      var button = e.target.closest('[data-action="remove-shop"]');
+      if (!button) return;
+      var index = parseInt(button.dataset.index, 10);
+      var list = S.shops().filter(function (_, i) { return i !== index; });
+      S.saveShops(list);
+      U.renderShopSettings();
+      Shop.renderSources();
+    });
+
+    el('shop-add').addEventListener('click', function () {
+      var list = S.shops().concat([{ id: S.uid().slice(0, 8), name: 'Nueva tienda', url: 'https://ejemplo.com/buscar?q={q}' }]);
+      S.saveShops(list);
+      U.renderShopSettings();
+      Shop.renderSources();
+    });
+
+    el('shop-reset').addEventListener('click', function () {
+      S.saveShops(S.DEFAULT_SHOPS.slice());
+      U.renderShopSettings();
+      Shop.renderSources();
+      U.toast('Tiendas restauradas');
     });
 
     /* Datos */
@@ -388,7 +524,9 @@
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') {
         if (!el('csv-modal').hidden) el('csv-modal').hidden = true;
+        else if (!el('profile-modal').hidden) closeProfileModal();
         else if (!el('drawer').hidden) closeDrawer(false);
+        else if (Shop.isOpen()) Shop.close();
       }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
@@ -402,6 +540,7 @@
 
     /* Aviso si se cierra la pestaña con la ficha a medias */
     global.addEventListener('beforeunload', function (e) {
+      S.flush(true);                    // lo pendiente de guardar, sale ya
       if (current && JSON.stringify(syncFromForm()) !== snapshot) {
         e.preventDefault();
         e.returnValue = '';
@@ -412,11 +551,26 @@
   /* ── Arranque ────────────────────────────────────────────── */
   function init() {
     initTheme();
-    S.load();
-    wire();
-    refresh();
-    var view = S.prefs().view;
-    showView(['panel', 'fichas', 'datos'].indexOf(view) > -1 ? view : 'panel');
+    S.onError(function (message) { U.toast(message); });
+
+    S.init().then(function (info) {
+      wire();
+      Shop.init();
+      refresh();
+      U.renderShopSettings();
+      U.renderStorageInfo();
+
+      var view = S.prefs().view;
+      showView(['panel', 'fichas', 'datos'].indexOf(view) > -1 ? view : 'panel');
+
+      if (!info.remote && location.protocol !== 'file:') {
+        U.toast('Sin servidor: los datos se guardan sólo en este navegador');
+      }
+    }).catch(function (err) {
+      console.error(err);
+      document.body.insertAdjacentHTML('afterbegin',
+        '<p class="empty">No se pudieron cargar los datos: ' + U.esc(err.message) + '</p>');
+    });
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

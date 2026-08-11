@@ -25,6 +25,13 @@
   </div>
 
   <div class="topbar-actions">
+    <label class="profile-picker" title="Perfil">
+      <span class="sr-only">Perfil</span>
+      <select id="profile-select"></select>
+    </label>
+    <button id="shop-toggle" class="icon-btn" title="Buscar repuestos" aria-label="Buscar repuestos">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h10l1.5 4H5.5L7 4Zm-2.5 6h15v9a1 1 0 0 1-1 1h-13a1 1 0 0 1-1-1v-9Zm4 2v2h7v-2h-7Z"/></svg>
+    </button>
     <button id="theme-toggle" class="icon-btn" title="Cambiar tema" aria-label="Cambiar tema">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9Z"/></svg>
     </button>
@@ -93,6 +100,43 @@
 
   <!-- ─────────────── DATOS ─────────────── -->
   <section id="view-datos" class="view">
+    <article class="card" id="storage-card">
+      <header class="card-head">
+        <h2>Dónde se guarda esto</h2>
+        <small id="storage-mode"></small>
+      </header>
+      <p class="hint" id="storage-detail"></p>
+    </article>
+
+    <article class="card">
+      <header class="card-head">
+        <h2>Perfiles</h2>
+        <small>separa talleres, socios o tus cosas personales</small>
+      </header>
+      <p class="hint">Cada perfil tiene sus propias fichas y sus propios números. El perfil se elige arriba a la derecha.</p>
+      <ul id="profile-list" class="mini-list"></ul>
+      <div class="row-btns" style="margin-top:12px">
+        <button class="btn" id="profile-new">+ Nuevo perfil</button>
+      </div>
+    </article>
+
+    <article class="card">
+      <header class="card-head">
+        <h2>Tiendas de repuestos</h2>
+        <small>lo que abre el buscador de piezas</small>
+      </header>
+      <p class="hint">
+        El <code>{q}</code> es lo que se busca (modelo + pieza). Si una tienda cambia su buscador,
+        cambia aquí la dirección y listo. Marca <em>ventana aparte</em> para las que no se dejan
+        ver dentro de la web (muchas lo bloquean a propósito).
+      </p>
+      <div id="shop-settings" class="shop-settings"></div>
+      <div class="row-btns" style="margin-top:12px">
+        <button class="btn" id="shop-add">+ Añadir tienda</button>
+        <button class="btn" id="shop-reset">Volver a las de fábrica</button>
+      </div>
+    </article>
+
     <div class="panel-grid">
       <article class="card">
         <header class="card-head">
@@ -273,6 +317,64 @@
   </div>
 </div>
 
+<!-- ─────────────── MINI NAVEGADOR DE REPUESTOS ─────────────── -->
+<section id="shop" class="shop" hidden aria-label="Buscador de repuestos">
+  <header class="shop-head">
+    <strong class="shop-title">Repuestos</strong>
+    <div class="shop-head-actions">
+      <button class="icon-btn sm" id="shop-open-out" title="Abrir en ventana aparte" aria-label="Abrir en ventana aparte">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3v2h3.6l-8.3 8.3 1.4 1.4L19 6.4V10h2V3h-7ZM5 5h5V3H3v18h18v-7h-2v5H5V5Z"/></svg>
+      </button>
+      <button class="icon-btn sm" id="shop-close" title="Cerrar" aria-label="Cerrar">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.4 5 5 6.4 10.6 12 5 17.6 6.4 19 12 13.4 17.6 19 19 17.6 13.4 12 19 6.4 17.6 5 12 10.6 6.4 5Z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="shop-bar">
+    <select id="shop-source" aria-label="Tienda"></select>
+    <input id="shop-query" type="search" placeholder="Modelo y pieza…" aria-label="Qué buscar">
+    <button class="btn btn-primary sm" id="shop-go">Buscar</button>
+  </div>
+
+  <div id="shop-quick" class="shop-quick"></div>
+
+  <div class="shop-frame">
+    <iframe id="shop-iframe" title="Tienda de repuestos"
+            referrerpolicy="no-referrer"
+            sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"></iframe>
+  </div>
+
+  <footer class="shop-foot">
+    <span class="shop-foot-text">¿Sale en blanco? Esa web no se deja ver aquí dentro</span>
+    <label class="shop-remember" title="Recordar para esta tienda">
+      <input type="checkbox" id="shop-remember"> siempre fuera
+    </label>
+    <button class="btn btn-primary sm" id="shop-blocked-open">Abrir fuera ↗</button>
+  </footer>
+</section>
+
+<!-- ─────────────── PERFILES ─────────────── -->
+<div id="profile-modal" class="modal" hidden>
+  <div class="modal-card">
+    <header class="card-head">
+      <h2 id="profile-modal-title">Nuevo perfil</h2>
+      <button class="icon-btn" id="profile-modal-close" aria-label="Cerrar">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.4 5 5 6.4 10.6 12 5 17.6 6.4 19 12 13.4 17.6 19 19 17.6 13.4 12 19 6.4 17.6 5 12 10.6 6.4 5Z"/></svg>
+      </button>
+    </header>
+    <div class="modal-body">
+      <label>Nombre del perfil
+        <input id="profile-name" placeholder="Taller de casa, Tienda, Personal…" maxlength="60">
+      </label>
+    </div>
+    <footer class="modal-foot">
+      <button class="btn" id="profile-cancel">Cancelar</button>
+      <button class="btn btn-primary" id="profile-save">Guardar</button>
+    </footer>
+  </div>
+</div>
+
 <datalist id="dl-brands"></datalist>
 <datalist id="dl-models"></datalist>
 <datalist id="dl-parts"></datalist>
@@ -283,6 +385,7 @@
 
 <script src="assets/store.js"></script>
 <script src="assets/csv.js"></script>
+<script src="assets/shop.js"></script>
 <script src="assets/ui.js"></script>
 <script src="assets/app.js"></script>
 </body>

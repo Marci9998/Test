@@ -1,12 +1,18 @@
 /* ============================================================
-   store.js — datos, cálculos y persistencia
-   Todo se guarda en localStorage del navegador. Sin servidor.
+   store.js — datos, cálculos, perfiles y guardado
+
+   Funciona de dos maneras y se apaña sola:
+     · con servidor  → guarda en el equipo donde corre server.py (API /api/…)
+     · sin servidor  → abriendo index.html a pelo, guarda en el navegador
    ============================================================ */
 (function (global) {
   'use strict';
 
-  var KEY = 'taller.tickets.v1';
-  var PREFS_KEY = 'taller.prefs.v1';
+  var LEGACY_KEY = 'taller.tickets.v1';          // datos de la primera versión
+  var PROFILES_KEY = 'taller.profiles.v1';
+  var TICKETS_KEY = 'taller.tickets.v2.';        // + id de perfil
+  var SETTINGS_KEY = 'taller.settings.v1';
+  var PREFS_KEY = 'taller.prefs.v1';             // tema, pestaña… siempre local
 
   /* ── Estados posibles de una ficha ───────────────────────── */
   var STATUSES = [
@@ -64,6 +70,18 @@
 
   function monthKey(iso) { return (iso || '').slice(0, 7); }
 
+  function lsGet(key, fallback) {
+    try {
+      var raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : fallback;
+    } catch (err) { return fallback; }
+  }
+
+  function lsSet(key, value) {
+    try { localStorage.setItem(key, JSON.stringify(value)); return true; }
+    catch (err) { return false; }
+  }
+
   /* ── Ficha vacía ─────────────────────────────────────────── */
   function blank() {
     return {
@@ -88,11 +106,10 @@
 
   /* Rellena huecos de fichas viejas o importadas */
   function normalize(t) {
-    var base = blank();
-    var out = Object.assign(base, t || {});
+    var out = Object.assign(blank(), t || {});
     out.id = out.id || uid();
     out.type = out.type === 'cliente' ? 'cliente' : 'reventa';
-    if (!status(out.status) || !STATUSES.some(function (s) { return s.id === out.status; })) out.status = 'pendiente';
+    if (!STATUSES.some(function (s) { return s.id === out.status; })) out.status = 'pendiente';
     out.parts = (Array.isArray(out.parts) ? out.parts : []).map(function (p) {
       return {
         id: p.id || uid(),
@@ -120,9 +137,7 @@
   }
 
   /* Ingreso real si está vendido; si no, el precio publicado como estimación */
-  function revenue(t) {
-    return num(t.salePrice) || num(t.listPrice);
-  }
+  function revenue(t) { return num(t.salePrice) || num(t.listPrice); }
 
   function isSold(t) { return t.status === 'vendido'; }
 
@@ -149,28 +164,160 @@
     return name || 'Sin modelo';
   }
 
-  /* ── Persistencia ────────────────────────────────────────── */
-  var tickets = [];
+  /* ── Hablar con el servidor ──────────────────────────────── */
+  var remote = false;          // ¿hay server.py detrás?
+  var onError = function () {};
 
-  function load() {
-    try {
-      var raw = localStorage.getItem(KEY);
-      tickets = raw ? JSON.parse(raw).map(normalize) : [];
-    } catch (err) {
-      console.warn('No se pudieron leer los datos guardados:', err);
-      tickets = [];
-    }
-    return tickets;
+  function api(path, options) {
+    options = options || {};
+    return fetch('/api' + path, {
+      method: options.method || 'GET',
+      headers: options.body ? { 'Content-Type': 'application/json' } : undefined,
+      body: options.body ? JSON.stringify(options.body) : undefined,
+      keepalive: !!options.keepalive
+    }).then(function (res) {
+      if (!res.ok) {
+        return res.json().catch(function () { return {}; }).then(function (data) {
+          throw new Error(data.error || ('El servidor respondió ' + res.status));
+        });
+      }
+      return res.status === 204 ? null : res.json();
+    });
   }
 
-  function save() {
-    try {
-      localStorage.setItem(KEY, JSON.stringify(tickets));
-      return true;
-    } catch (err) {
-      console.error('No se pudo guardar:', err);
-      return false;
+  function detectServer() {
+    if (location.protocol === 'file:') return Promise.resolve(false);
+    var timeout = new Promise(function (resolve) { setTimeout(function () { resolve(false); }, 2500); });
+    return Promise.race([
+      api('/ping').then(function (data) { return !!(data && data.ok); }).catch(function () { return false; }),
+      timeout
+    ]);
+  }
+
+  /* ── Perfiles ────────────────────────────────────────────── */
+  var profiles = [];
+  var activeId = null;
+  var tickets = [];
+
+  function localProfiles() {
+    var list = lsGet(PROFILES_KEY, null);
+    if (!Array.isArray(list) || !list.length) {
+      list = [{ id: uid().slice(0, 12), name: 'Mi taller', createdAt: today() }];
+      lsSet(PROFILES_KEY, list);
+      // si venías de la primera versión, esas fichas pasan al primer perfil
+      var legacy = lsGet(LEGACY_KEY, null);
+      if (Array.isArray(legacy) && legacy.length) lsSet(TICKETS_KEY + list[0].id, legacy);
     }
+    return list;
+  }
+
+  function loadProfiles() {
+    if (!remote) { profiles = localProfiles(); return Promise.resolve(profiles); }
+    return api('/profiles').then(function (list) {
+      profiles = Array.isArray(list) ? list : [];
+      return profiles;
+    });
+  }
+
+  function createProfile(name) {
+    if (!remote) {
+      var profile = { id: uid().slice(0, 12), name: (name || 'Taller').trim().slice(0, 60), createdAt: today() };
+      profiles.push(profile);
+      lsSet(PROFILES_KEY, profiles);
+      lsSet(TICKETS_KEY + profile.id, []);
+      return Promise.resolve(profile);
+    }
+    return api('/profiles', { method: 'POST', body: { name: name } }).then(function (profile) {
+      profiles.push(profile);
+      return profile;
+    });
+  }
+
+  function renameProfile(id, name) {
+    name = (name || '').trim().slice(0, 60);
+    if (!name) return Promise.resolve(null);
+    if (!remote) {
+      profiles.forEach(function (p) { if (p.id === id) p.name = name; });
+      lsSet(PROFILES_KEY, profiles);
+      return Promise.resolve(true);
+    }
+    return api('/profiles/' + id, { method: 'PATCH', body: { name: name } }).then(function () {
+      profiles.forEach(function (p) { if (p.id === id) p.name = name; });
+      return true;
+    });
+  }
+
+  function deleteProfile(id) {
+    if (profiles.length <= 1) return Promise.reject(new Error('Tiene que quedar al menos un perfil'));
+    function afterDelete() {
+      profiles = profiles.filter(function (p) { return p.id !== id; });
+      if (activeId === id) activeId = profiles[0].id;
+      lsSet(PREFS_KEY, Object.assign(prefs(), { profile: activeId }));
+      return loadTickets();
+    }
+    if (!remote) {
+      try { localStorage.removeItem(TICKETS_KEY + id); } catch (err) { /* da igual */ }
+      lsSet(PROFILES_KEY, profiles.filter(function (p) { return p.id !== id; }));
+      return afterDelete();
+    }
+    return api('/profiles/' + id, { method: 'DELETE' }).then(afterDelete);
+  }
+
+  function setActiveProfile(id) {
+    if (!profiles.some(function (p) { return p.id === id; })) return Promise.resolve(false);
+    activeId = id;
+    prefs({ profile: id });
+    return loadTickets().then(function () { return true; });
+  }
+
+  function activeProfile() {
+    for (var i = 0; i < profiles.length; i++) if (profiles[i].id === activeId) return profiles[i];
+    return profiles[0] || null;
+  }
+
+  /* ── Fichas ──────────────────────────────────────────────── */
+  function loadTickets() {
+    if (!remote) {
+      tickets = (lsGet(TICKETS_KEY + activeId, []) || []).map(normalize);
+      return Promise.resolve(tickets);
+    }
+    return api('/profiles/' + activeId + '/tickets').then(function (list) {
+      tickets = (Array.isArray(list) ? list : []).map(normalize);
+      return tickets;
+    });
+  }
+
+  /* Guardado: se junta lo que pase en el mismo instante y se manda una vez */
+  var pending = null, saving = false, dirty = false;
+
+  function save() {
+    dirty = true;
+    if (pending) return pending;
+    pending = new Promise(function (resolve) {
+      setTimeout(function () {
+        pending = null;
+        resolve(flush());
+      }, 120);
+    });
+    return pending;
+  }
+
+  function flush(keepalive) {
+    if (!dirty || saving) return Promise.resolve();
+    dirty = false;
+    if (!remote) {
+      if (!lsSet(TICKETS_KEY + activeId, tickets)) {
+        onError('No se pudo guardar en este navegador (¿memoria llena o modo incógnito?)');
+      }
+      return Promise.resolve();
+    }
+    saving = true;
+    return api('/profiles/' + activeId + '/tickets', {
+      method: 'PUT', body: tickets, keepalive: !!keepalive
+    }).catch(function (err) {
+      dirty = true;                       // lo volveremos a intentar
+      onError('No se pudo guardar en el servidor: ' + err.message);
+    }).then(function () { saving = false; });
   }
 
   function all() { return tickets; }
@@ -209,14 +356,52 @@
 
   function wipe() { tickets = []; save(); }
 
-  /* ── Preferencias (tema, filtros) ────────────────────────── */
+  /* ── Preferencias del dispositivo (tema, pestaña, perfil) ── */
   function prefs(patch) {
-    var current = {};
-    try { current = JSON.parse(localStorage.getItem(PREFS_KEY)) || {}; } catch (err) { current = {}; }
+    var current = lsGet(PREFS_KEY, {}) || {};
     if (!patch) return current;
-    var next = Object.assign(current, patch);
-    try { localStorage.setItem(PREFS_KEY, JSON.stringify(next)); } catch (err) { /* modo incógnito */ }
-    return next;
+    lsSet(PREFS_KEY, Object.assign(current, patch));
+    return current;
+  }
+
+  /* ── Ajustes compartidos (tiendas de repuestos) ──────────── */
+  var settings = {};
+
+  var DEFAULT_SHOPS = [
+    { id: 'fuente',  name: 'Repuestos Fuente', url: 'https://www.repuestosfuente.com/buscar?controller=search&s={q}' },
+    { id: 'sentrix', name: 'Mobile Sentrix',   url: 'https://es.mobilesentrix.eu/catalogsearch/result/?q={q}' },
+    { id: 'wallapop', name: 'Wallapop',        url: 'https://es.wallapop.com/app/search?keywords={q}' },
+    { id: 'google',  name: 'Buscar en Google', url: 'https://www.google.com/search?q={q}' }
+  ];
+
+  var WALLAPOP_LINKS = [
+    { id: 'wp-sales', name: 'Mis ventas', url: 'https://es.wallapop.com/app/catalog/published' },
+    { id: 'wp-chat',  name: 'Mensajes',   url: 'https://es.wallapop.com/app/chat' }
+  ];
+
+  function loadSettings() {
+    if (!remote) {
+      settings = lsGet(SETTINGS_KEY, {}) || {};
+      return Promise.resolve(settings);
+    }
+    return api('/settings').then(function (data) {
+      settings = data || {};
+      return settings;
+    }).catch(function () { settings = {}; return settings; });
+  }
+
+  function shops() {
+    var saved = settings.shops;
+    if (!Array.isArray(saved) || !saved.length) return DEFAULT_SHOPS.slice();
+    return saved;
+  }
+
+  function saveShops(list) {
+    settings.shops = list;
+    if (!remote) { lsSet(SETTINGS_KEY, settings); return Promise.resolve(); }
+    return api('/settings', { method: 'PUT', body: settings }).catch(function (err) {
+      onError('No se pudieron guardar los ajustes: ' + err.message);
+    });
   }
 
   /* ── Métricas del panel ──────────────────────────────────── */
@@ -224,36 +409,28 @@
     var openTickets = tickets.filter(function (t) { return status(t.status).open; });
     var sold = tickets.filter(isSold);
     var thisMonth = monthKey(today());
-
     var soldThisMonth = sold.filter(function (t) { return monthKey(t.soldAt || t.updatedAt) === thisMonth; });
 
-    var invested = openTickets.reduce(function (s, t) { return s + totalCost(t); }, 0);
-    var expected = openTickets.reduce(function (s, t) { return s + profit(t); }, 0);
-    var profitMonth = soldThisMonth.reduce(function (s, t) { return s + profit(t); }, 0);
-    var profitTotal = sold.reduce(function (s, t) { return s + profit(t); }, 0);
-
     var margins = sold.map(margin).filter(function (m) { return m !== 0; });
-    var avgMargin = margins.length ? margins.reduce(function (a, b) { return a + b; }, 0) / margins.length : 0;
 
     return {
       open: openTickets.length,
       sold: sold.length,
       soldThisMonth: soldThisMonth.length,
-      invested: invested,
-      expected: expected,
-      profitMonth: profitMonth,
-      profitTotal: profitTotal,
-      avgMargin: avgMargin
+      invested: openTickets.reduce(function (s, t) { return s + totalCost(t); }, 0),
+      expected: openTickets.reduce(function (s, t) { return s + profit(t); }, 0),
+      profitMonth: soldThisMonth.reduce(function (s, t) { return s + profit(t); }, 0),
+      profitTotal: sold.reduce(function (s, t) { return s + profit(t); }, 0),
+      avgMargin: margins.length ? margins.reduce(function (a, b) { return a + b; }, 0) / margins.length : 0
     };
   }
 
   /* Beneficio de los últimos n meses, para el gráfico */
   function monthlyProfit(months) {
-    var out = [];
-    var now = new Date();
+    var out = [], now = new Date();
     for (var i = months - 1; i >= 0; i--) {
       var d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      var key = d.toISOString().slice(0, 7);
+      var key = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
       var total = tickets.filter(function (t) {
         return isSold(t) && monthKey(t.soldAt || t.updatedAt) === key;
       }).reduce(function (s, t) { return s + profit(t); }, 0);
@@ -274,11 +451,34 @@
       if (t.model) models[t.model] = 1;
       (t.parts || []).forEach(function (p) { if (p.name) parts[p.name] = 1; });
     });
-    return { brands: Object.keys(brands).sort(), models: Object.keys(models).sort(), parts: Object.keys(parts).sort() };
+    return {
+      brands: Object.keys(brands).sort(),
+      models: Object.keys(models).sort(),
+      parts: Object.keys(parts).sort()
+    };
+  }
+
+  /* ── Arranque ────────────────────────────────────────────── */
+  function init() {
+    return detectServer().then(function (found) {
+      remote = found;
+      return loadProfiles();
+    }).then(function () {
+      if (!profiles.length) return createProfile('Mi taller');
+    }).then(function () {
+      var saved = prefs().profile;
+      activeId = profiles.some(function (p) { return p.id === saved; }) ? saved : profiles[0].id;
+      prefs({ profile: activeId });
+      return Promise.all([loadTickets(), loadSettings()]);
+    }).then(function () {
+      return { remote: remote, profile: activeProfile(), tickets: tickets.length };
+    });
   }
 
   global.Store = {
     STATUSES: STATUSES,
+    DEFAULT_SHOPS: DEFAULT_SHOPS,
+    WALLAPOP_LINKS: WALLAPOP_LINKS,
     status: status,
     statusLabel: statusLabel,
     uid: uid,
@@ -294,8 +494,19 @@
     margin: margin,
     isSold: isSold,
     title: title,
-    load: load,
-    save: save,
+
+    init: init,
+    isRemote: function () { return remote; },
+    onError: function (fn) { onError = fn || function () {}; },
+    flush: flush,
+
+    profiles: function () { return profiles; },
+    activeProfile: activeProfile,
+    setActiveProfile: setActiveProfile,
+    createProfile: createProfile,
+    renameProfile: renameProfile,
+    deleteProfile: deleteProfile,
+
     all: all,
     get: get,
     upsert: upsert,
@@ -303,6 +514,10 @@
     replaceAll: replaceAll,
     addMany: addMany,
     wipe: wipe,
+
+    shops: shops,
+    saveShops: saveShops,
+
     prefs: prefs,
     stats: stats,
     monthlyProfit: monthlyProfit,

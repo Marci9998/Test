@@ -481,10 +481,22 @@ input:focus, select:focus, textarea:focus, .search input:focus {
 .parts { display: grid; gap: 8px; margin-bottom: 10px; }
 .part {
   display: grid;
-  grid-template-columns: 1fr 62px 86px 32px;
+  grid-template-columns: 1fr 62px 86px 32px 32px;
   gap: 6px;
   align-items: center;
 }
+.part-search {
+  display: grid;
+  place-items: center;
+  height: 36px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+}
+.part-search svg { width: 16px; height: 16px; fill: var(--text-faint); }
+.part-search:hover { border-color: var(--accent); }
+.part-search:hover svg { fill: var(--accent); }
 .part input { margin-top: 0; }
 .part .part-qty, .part .part-cost { text-align: right; font-variant-numeric: tabular-nums; }
 .part-del {
@@ -577,6 +589,151 @@ input:focus, select:focus, textarea:focus, .search input:focus {
 .csv-map label { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: center; }
 .csv-map select { margin-top: 0; }
 
+/* ───────────────────────── Perfiles ───────────────────────── */
+.sr-only {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+.profile-picker select {
+  margin-top: 0;
+  padding: 8px 10px;
+  max-width: 170px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev);
+  font-size: 13.5px;
+  font-weight: 550;
+}
+
+.btn.sm { padding: 5px 10px; font-size: 12.5px; }
+.icon-btn.sm { width: 30px; height: 30px; }
+.icon-btn.sm svg { width: 15px; height: 15px; }
+
+#profile-list li { gap: 8px; cursor: default; }
+#profile-list .mini-title .tag { margin-left: 4px; vertical-align: 1px; }
+
+/* ───────────────────────── Ajustes de tiendas ───────────────────────── */
+.shop-settings { display: grid; gap: 8px; }
+.shop-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(180px, 2.2fr) auto 32px;
+  gap: 6px;
+  align-items: center;
+}
+.shop-row input[type="text"], .shop-row input:not([type]) { margin-top: 0; }
+.shop-row .shop-name, .shop-row .shop-url { margin-top: 0; font-size: 13px; }
+.shop-url { font-family: var(--mono); font-size: 12px !important; }
+.shop-popup {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 12px; color: var(--text-dim); white-space: nowrap;
+}
+.shop-popup input { width: auto; margin: 0; }
+code {
+  font-family: var(--mono);
+  font-size: .88em;
+  background: var(--bg-sunken);
+  border: 1px solid var(--line-soft);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+/* ───────────────────────── Mini navegador de repuestos ───────────────────────── */
+.shop {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 55;             /* por encima de la ficha: se usa mientras la rellenas */
+  width: min(420px, calc(100vw - 32px));
+  height: min(560px, calc(100vh - 120px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  resize: both;
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  animation: slide-up .18s cubic-bezier(.2, .7, .3, 1);
+}
+@keyframes slide-up { from { transform: translateY(12px); opacity: .4; } }
+.shop.is-dragging { user-select: none; }
+
+/* Con la ficha abierta y sitio de sobra, el panel se aparta a su izquierda
+   para poder mirar el precio y escribirlo sin tapar nada. */
+@media (min-width: 1080px) {
+  body.drawer-open .shop:not(.is-moved) { right: 596px; }
+}
+
+.shop-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-sunken);
+  cursor: grab;
+  touch-action: none;
+}
+.shop.is-dragging .shop-head { cursor: grabbing; }
+.shop-title { font-size: 13.5px; }
+.shop-head-actions { display: flex; gap: 6px; }
+
+.shop-bar {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.shop-bar select, .shop-bar input { margin-top: 0; font-size: 13px; padding: 7px 9px; }
+.shop-bar select { max-width: 140px; }
+
+.shop-quick { display: flex; gap: 6px; flex-wrap: wrap; padding: 8px 10px 0; }
+.shop-chip {
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.shop-chip:hover { color: var(--text); border-color: var(--accent); }
+
+.shop-frame { position: relative; flex: 1; margin: 8px 10px 0; min-height: 0; }
+.shop-frame iframe {
+  width: 100%; height: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: #fff;
+}
+
+/* Barra siempre visible: como no se puede saber si la tienda ha bloqueado
+   el marco, la salida está a mano en todo momento. */
+.shop-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--line-soft);
+  margin-top: 8px;
+}
+.shop-foot-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 11.5px;
+  color: var(--text-faint);
+  line-height: 1.3;
+}
+.shop-remember {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 11.5px; color: var(--text-faint); white-space: nowrap;
+}
+.shop-remember input { width: auto; margin: 0; }
+
 /* ───────────────────────── Toast ───────────────────────── */
 .toast {
   position: fixed;
@@ -592,6 +749,7 @@ input:focus, select:focus, textarea:focus, .search input:focus {
   font-weight: 550;
   box-shadow: var(--shadow-lg);
   animation: toast .2s ease;
+  pointer-events: none;        /* nunca se come un clic de lo que tape */
 }
 @keyframes toast { from { opacity: 0; transform: translate(-50%, 8px); } }
 
@@ -606,10 +764,20 @@ input:focus, select:focus, textarea:focus, .search input:focus {
   .ticket { grid-template-columns: 1fr; }
   .ticket-money { text-align: left; flex-direction: row; align-items: baseline; gap: 10px; margin-top: 4px; }
   .drawer { width: 100%; border-left: 0; }
-  .part { grid-template-columns: 1fr 52px 76px 30px; }
-  .parts-head { grid-template-columns: 1fr 52px 76px 30px; }
+  .part { grid-template-columns: 1fr 46px 68px 30px 30px; }
+  .parts-head { grid-template-columns: 1fr 46px 68px 30px 30px; }
   .csv-map label { grid-template-columns: 1fr; gap: 4px; }
   .kpi-value { font-size: 21px; }
+  .profile-picker select { max-width: 116px; }
+  .shop-row { grid-template-columns: 1fr auto; }
+  .shop-row .shop-url { grid-column: 1 / -1; }
+  .shop {
+    right: 0; bottom: 0; left: 0;
+    width: 100%;
+    height: 78vh;
+    border-radius: var(--radius) var(--radius) 0 0;
+    resize: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
