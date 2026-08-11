@@ -91,7 +91,7 @@ que sin el arranque instantáneo. Para eso está la aplicación de Android, que 
 
 ## La aplicación de Android (APK)
 
-En `android/` está el proyecto: una aplicación que abre tu servidor a pantalla completa, con
+En `apk/` está el proyecto: una aplicación que abre tu servidor a pantalla completa, con
 su icono, guardando la sesión y con botón de atrás. La primera vez pide la dirección
 (`http://192.168.x.x:8477`) y ya no la vuelve a pedir.
 
@@ -105,6 +105,9 @@ su icono, guardando la sesión y con botón de atrás. La primera vez pide la di
 
 Va firmado con la clave de depuración: sirve para instalarlo en tus móviles, no para
 publicarlo en Google Play.
+
+Si al abrirla se queda **en blanco**: menú **⋮ → ¿Qué ha fallado?** enseña la dirección
+guardada y el último error, y desde ahí se puede recargar o cambiar la dirección.
 
 ## Qué hace
 
@@ -275,7 +278,7 @@ quotepdf.py    el diseño del presupuesto, separado de las tripas del PDF
 index.html
 manifest.webmanifest  para añadirla a la pantalla de inicio del móvil
 sw.js                 arranque rápido y aviso de sin conexión
-android/              proyecto de la aplicación de Android (lo compila GitHub)
+apk/                  proyecto de la aplicación de Android (lo compila GitHub)
 assets/
   styles.css   estilos y tema claro/oscuro
   store.js     datos, cálculos, perfiles y guardado (servidor o navegador)

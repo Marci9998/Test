@@ -6,7 +6,7 @@ name: Construir el APK
 on:
   push:
     paths:
-      - 'android/**'
+      - 'apk/**'
       - '.github/workflows/apk.yml'
   workflow_dispatch:
 
@@ -27,12 +27,12 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: Compilar
-        working-directory: android
+        working-directory: apk
         run: gradle assembleRelease --no-daemon
 
       - name: Guardar el APK
         uses: actions/upload-artifact@v4
         with:
           name: taller-apk
-          path: android/app/build/outputs/apk/release/*.apk
+          path: apk/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
