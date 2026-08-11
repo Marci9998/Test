@@ -455,6 +455,55 @@
     return '/api/profiles/' + activeId + '/quotes/' + id + '/pdf';
   }
 
+  /* ── Adjuntos de una ficha (diagnósticos, fotos) ─────────── */
+  /* Índice ligero para saber qué fichas llevan algo adjunto, sin pedir
+     los adjuntos de cada una por separado. */
+  var fileCounts = {};
+
+  function loadFileCounts() {
+    if (!remote) { fileCounts = {}; return Promise.resolve(fileCounts); }
+    return api('/profiles/' + activeId + '/files').then(function (list) {
+      fileCounts = {};
+      (list || []).forEach(function (f) {
+        var box = fileCounts[f.ticketId] || (fileCounts[f.ticketId] = { total: 0, report: false });
+        box.total++;
+        if (f.kind === 'diagnostico') box.report = true;
+      });
+      return fileCounts;
+    }).catch(function () { fileCounts = {}; return fileCounts; });
+  }
+
+  function filesOf(ticketId) { return fileCounts[ticketId] || { total: 0, report: false }; }
+
+  function ticketFiles(ticketId) {
+    if (!remote) return Promise.resolve([]);
+    return api('/profiles/' + activeId + '/tickets/' + ticketId + '/files')
+      .catch(function () { return []; });
+  }
+
+  function uploadFile(ticketId, file) {
+    if (!remote) return Promise.reject(new Error('Los adjuntos necesitan el servidor'));
+    return fetch('/api/profiles/' + activeId + '/tickets/' + ticketId +
+                 '/files?name=' + encodeURIComponent(file.name), {
+      method: 'POST',
+      headers: { 'Content-Type': file.type || 'application/octet-stream' },
+      body: file
+    }).then(function (res) {
+      return res.json().then(function (data) {
+        if (!res.ok) throw new Error(data.error || 'No se pudo subir');
+        return data;
+      });
+    });
+  }
+
+  function deleteFile(fileId) {
+    return api('/profiles/' + activeId + '/files/' + fileId, { method: 'DELETE' });
+  }
+
+  function fileUrl(fileId) {
+    return '/api/profiles/' + activeId + '/files/' + fileId;
+  }
+
   /* ── Datos del taller (los que salen en el PDF) ──────────── */
   function business() { return settings.business || {}; }
 
@@ -603,7 +652,7 @@
       var saved = prefs().profile;
       activeId = profiles.some(function (p) { return p.id === saved; }) ? saved : profiles[0].id;
       prefs({ profile: activeId });
-      return Promise.all([loadTickets(), loadQuotes(), loadSettings()]);
+      return Promise.all([loadTickets(), loadQuotes(), loadSettings(), loadFileCounts()]);
     });
   }
 
@@ -658,6 +707,13 @@
     shops: shops,
     saveShops: saveShops,
     proxyUrl: proxyUrl,
+
+    ticketFiles: ticketFiles,
+    filesOf: filesOf,
+    loadFileCounts: loadFileCounts,
+    uploadFile: uploadFile,
+    deleteFile: deleteFile,
+    fileUrl: fileUrl,
 
     quotes: allQuotes,
     quote: quote,

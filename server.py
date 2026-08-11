@@ -41,6 +41,17 @@ SESSION_DAYS = 30
 PBKDF2_ROUNDS = 210000
 FORBIDDEN_PORTS = {8083}
 MAX_BODY = 8 * 1024 * 1024   # 8 MB de fichas es muchísimo; corta ahí
+MAX_UPLOAD = 25 * 1024 * 1024   # los informes de diagnóstico y las fotos sí pesan
+
+ALLOWED_FILE_TYPES = {'.pdf', '.png', '.jpg', '.jpeg', '.webp', '.heic'}
+FILE_TYPES = {
+    '.pdf': 'application/pdf',
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.webp': 'image/webp',
+    '.heic': 'image/heic',
+}
 
 STATIC_TYPES = {
     '.html': 'text/html; charset=utf-8',
@@ -152,6 +163,14 @@ class Storage:
         if os.path.exists(path):
             self._rotate_backup(profile_id, path)
         self._write_json(path, tickets)
+        self._drop_orphan_files(profile_id, tickets)
+
+    def _drop_orphan_files(self, profile_id, tickets):
+        """Los adjuntos de una ficha borrada no tienen que quedarse ahí."""
+        alive = set(t.get('id') for t in tickets if isinstance(t, dict))
+        for entry in self.files(profile_id):
+            if entry.get('ticketId') and entry['ticketId'] not in alive:
+                self.delete_file(profile_id, entry['id'])
 
     def _rotate_backup(self, profile_id, path):
         """Deja una copia al día por perfil, y guarda las 14 últimas."""
@@ -171,6 +190,71 @@ class Storage:
                 os.remove(os.path.join(self.dir, 'backups', old))
             except OSError:
                 pass
+
+    # — adjuntos (informes de diagnóstico, fotos…) —
+
+    def _files_index(self, profile_id):
+        return os.path.join(self.dir, 'files', profile_id, 'index.json')
+
+    def files(self, profile_id, ticket_id=None):
+        data = self._read_json(self._files_index(profile_id), [])
+        data = data if isinstance(data, list) else []
+        if ticket_id:
+            data = [f for f in data if f.get('ticketId') == ticket_id]
+        return data
+
+    def add_file(self, profile_id, ticket_id, name, content, kind=''):
+        safe_name = re.sub(r'[\r\n\x00]', '', str(name or 'adjunto'))[:120] or 'adjunto'
+        ext = os.path.splitext(safe_name)[1].lower()
+        if ext not in ALLOWED_FILE_TYPES:
+            raise ValueError('Sólo se pueden subir PDF o fotos (%s).'
+                             % ', '.join(sorted(ALLOWED_FILE_TYPES)))
+
+        folder = os.path.join(self.dir, 'files', profile_id)
+        os.makedirs(folder, exist_ok=True)
+
+        entry = {
+            'id': uuid.uuid4().hex[:12],
+            'ticketId': ticket_id,
+            'name': safe_name,
+            'kind': kind or ('diagnostico' if looks_like_report(safe_name) else 'adjunto'),
+            'size': len(content),
+            'ext': ext,
+            'uploadedAt': time.strftime('%Y-%m-%d %H:%M'),
+        }
+
+        with open(os.path.join(folder, entry['id'] + ext), 'wb') as fh:
+            fh.write(content)
+
+        index = self.files(profile_id)
+        index.append(entry)
+        self._write_json(self._files_index(profile_id), index)
+        return entry
+
+    def file_entry(self, profile_id, file_id):
+        for entry in self.files(profile_id):
+            if entry.get('id') == file_id:
+                return entry
+        return None
+
+    def file_path(self, profile_id, entry):
+        return os.path.join(self.dir, 'files', profile_id, entry['id'] + entry.get('ext', ''))
+
+    def delete_file(self, profile_id, file_id):
+        index = self.files(profile_id)
+        entry = None
+        for item in index:
+            if item.get('id') == file_id:
+                entry = item
+        if not entry:
+            return False
+        try:
+            os.remove(self.file_path(profile_id, entry))
+        except OSError:
+            pass
+        self._write_json(self._files_index(profile_id),
+                         [f for f in index if f.get('id') != file_id])
+        return True
 
     # — presupuestos —
 
@@ -530,6 +614,55 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({'ok': True, 'count': len(tickets)})
             return self._error(405, 'Método no permitido')
 
+        # adjuntos de una ficha
+        if len(parts) == 5 and parts[0] == 'profiles' and parts[2] == 'tickets' \
+                and parts[4] == 'files':
+            profile_id = safe_id(parts[1])
+            ticket_id = safe_id(parts[3])
+            if method == 'GET':
+                return self._json(self.storage.files(profile_id, ticket_id))
+            if method == 'POST':
+                params = parse_qs(urlparse(self.path).query)
+                name = (params.get('name') or [''])[0]
+                kind = (params.get('kind') or [''])[0]
+                length = int(self.headers.get('Content-Length') or 0)
+                if length <= 0:
+                    raise ValueError('No ha llegado el fichero.')
+                if length > MAX_UPLOAD:
+                    raise ValueError('El fichero pasa de %d MB.' % (MAX_UPLOAD // (1024 * 1024)))
+                content = self.rfile.read(length)
+                return self._json(self.storage.add_file(profile_id, ticket_id, name,
+                                                        content, kind), 201)
+            return self._error(405, 'Método no permitido')
+
+        # todos los adjuntos del perfil (para marcar las fichas en la lista)
+        if len(parts) == 3 and parts[0] == 'profiles' and parts[2] == 'files' \
+                and method == 'GET':
+            return self._json(self.storage.files(safe_id(parts[1])))
+
+        # un adjunto suelto: descargarlo o borrarlo
+        if len(parts) == 4 and parts[0] == 'profiles' and parts[2] == 'files':
+            profile_id = safe_id(parts[1])
+            file_id = safe_id(parts[3])
+            entry = self.storage.file_entry(profile_id, file_id)
+            if not entry:
+                return self._error(404, 'No existe ese adjunto')
+
+            if method == 'GET':
+                try:
+                    with open(self.storage.file_path(profile_id, entry), 'rb') as fh:
+                        body = fh.read()
+                except OSError:
+                    return self._error(404, 'El fichero ya no está en el disco')
+                disposition = 'inline' if entry.get('ext') == '.pdf' else 'attachment'
+                return self._send(200, body, FILE_TYPES.get(entry.get('ext'), 'application/octet-stream'),
+                                  {'Content-Disposition': '%s; filename="%s"'
+                                   % (disposition, entry['name'].replace('"', ''))})
+            if method == 'DELETE':
+                self.storage.delete_file(profile_id, file_id)
+                return self._json({'ok': True})
+            return self._error(405, 'Método no permitido')
+
         if len(parts) == 3 and parts[0] == 'profiles' and parts[2] == 'quotes':
             profile_id = safe_id(parts[1])
             if not any(p['id'] == profile_id for p in self.storage.profiles()):
@@ -556,10 +689,14 @@ class Handler(BaseHTTPRequestHandler):
                 if p['id'] == profile_id:
                     profile_name = p.get('name', '')
 
+            attachments = []
+            if quote.get('ticketId'):
+                attachments = self.storage.files(profile_id, quote['ticketId'])
+
             try:
                 import quotepdf
                 data = quotepdf.build(quote, (self.storage.settings() or {}).get('business'),
-                                      profile_name)
+                                      profile_name, attachments)
             except Exception as err:                   # noqa: BLE001
                 sys.stderr.write('Error montando el PDF: %r\n' % (err,))
                 return self._error(500, 'No se pudo montar el PDF')
@@ -849,6 +986,13 @@ def prepare_html(html, base_url, proxy_base):
     else:
         html += script
     return html
+
+
+def looks_like_report(name):
+    """¿Esto huele a informe de diagnóstico (M360 y compañía)?"""
+    plain = str(name or '').lower()
+    return any(word in plain for word in
+               ('m360', 'diagnos', 'diagnós', 'report', 'informe', 'test'))
 
 
 def safe_id(value):

@@ -170,6 +170,26 @@ Las direcciones de las tiendas se editan en **Datos → Tiendas de repuestos**. 
 lo que se busca. Si una tienda cambia su buscador o quieres añadir otra (AliExpress, tu
 proveedor de siempre…), se cambia ahí sin tocar código.
 
+### Diagnósticos y adjuntos
+
+Dentro de cada ficha, en **Diagnóstico y adjuntos**, se pueden subir ficheros: el informe
+del **M360** (o de cualquier otro diagnóstico), fotos del equipo antes de tocarlo, el
+resguardo… Se guardan en el servidor junto a la ficha, en `/var/lib/taller/files/`.
+
+- Admite PDF y fotos (`.pdf .png .jpg .jpeg .webp .heic`), hasta 25 MB cada uno.
+- Si el nombre del fichero suena a informe (*m360*, *diagnóstico*, *report*, *test*…) se
+  marca solo como **diagnóstico**; en la lista de fichas verás un 📄 para saber de un
+  vistazo cuáles lo llevan.
+- **Abrir** enseña el PDF en una pestaña (para reenviarlo por WhatsApp, por ejemplo).
+- Cuando hagas el presupuesto desde esa ficha, el PDF incluye un apartado
+  **Diagnóstico** diciendo que se entrega el informe, con su nombre y su fecha.
+- Al borrar una ficha, sus adjuntos se borran con ella (no se quedan ocupando disco).
+- Como todo lo demás, sin haber entrado con tu cuenta no se pueden ni ver ni descargar.
+
+> Esto guarda el informe **junto** al presupuesto, no dentro del mismo PDF. Si lo que
+> quieres es que las páginas del M360 salgan pegadas al final del presupuesto en un único
+> fichero, se puede intentar, pero haría falta un informe de verdad para probarlo.
+
 ### Presupuestos y PDF
 
 Pestaña **Presupuestos**: papeles para dar al cliente, con su numeración por año
@@ -263,6 +283,10 @@ GET    /api/profiles/<id>/tickets
 PUT    /api/profiles/<id>/tickets [ …fichas… ]
 GET    /api/settings              PUT /api/settings            {shops:[…], business:{…}}
 GET    /api/profiles/<id>/quotes  PUT /api/profiles/<id>/quotes [ …presupuestos… ]
+GET    /api/profiles/<id>/files             todos los adjuntos del perfil
+GET    /api/profiles/<id>/tickets/<tid>/files
+POST   /api/profiles/<id>/tickets/<tid>/files?name=…   (el fichero, en crudo)
+GET    /api/profiles/<id>/files/<fid>       DELETE para quitarlo
 GET    /api/profiles/<id>/quotes/<qid>/pdf
 GET    /api/proxy?url=…          (sólo dominios de tus tiendas)
 

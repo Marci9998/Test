@@ -163,6 +163,10 @@
     if (t.type === 'cliente' && t.customerName) tags.push('👤 ' + t.customerName);
     if ((t.parts || []).length) tags.push((t.parts.length) + ' pieza' + (t.parts.length > 1 ? 's' : ''));
 
+    var files = S.filesOf ? S.filesOf(t.id) : { total: 0, report: false };
+    if (files.report) tags.push('📄 diagnóstico');
+    else if (files.total) tags.push('📎 ' + files.total);
+
     return '<article class="ticket" data-id="' + esc(t.id) + '" ' + statusVars(t.status) + '>' +
       '<div class="ticket-main">' +
         '<div class="ticket-title">' + esc(S.title(t)) + '</div>' +

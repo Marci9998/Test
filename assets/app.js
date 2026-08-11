@@ -82,6 +82,7 @@
     U.renderParts(current.parts);
     applyType();
     U.renderSummary(current);
+    loadFiles();
 
     el('drawer').hidden = false;
     el('drawer-backdrop').hidden = false;
@@ -254,6 +255,74 @@
     refresh();
     showView('fichas');
     U.toast(tickets.length + ' fichas importadas');
+  }
+
+  /* ── Adjuntos de la ficha (diagnóstico del M360, fotos…) ─── */
+  function renderFiles(files) {
+    var list = el('files-list');
+    if (!files.length) {
+      list.innerHTML = '<li class="mini-empty">Todavía no hay nada adjunto.</li>';
+      return;
+    }
+    list.innerHTML = files.map(function (f) {
+      var esDiag = f.kind === 'diagnostico';
+      return '<li data-file="' + U.esc(f.id) + '">' +
+        '<div class="mini-main">' +
+          '<div class="mini-title">' + (f.ext === '.pdf' ? '📄 ' : '🖼️ ') + U.esc(f.name) +
+            (esDiag ? ' <span class="tag">diagnóstico</span>' : '') + '</div>' +
+          '<div class="mini-sub">' + U.esc(fileSize(f.size)) + ' · ' + U.esc(f.uploadedAt) + '</div>' +
+        '</div>' +
+        '<a class="btn sm" href="' + U.esc(S.fileUrl(f.id)) + '" target="_blank" rel="noopener">Abrir</a>' +
+        '<button type="button" class="btn sm btn-danger-ghost" data-remove="' + U.esc(f.id) + '">Quitar</button>' +
+      '</li>';
+    }).join('');
+  }
+
+  function fileSize(bytes) {
+    bytes = Number(bytes) || 0;
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + ' KB';
+    return (Math.round(bytes / 1024 / 102.4) / 10) + ' MB';
+  }
+
+  function loadFiles() {
+    if (!current) return;
+    var block = el('files-block');
+
+    if (!S.isRemote()) {
+      block.hidden = false;
+      el('files-add').disabled = true;
+      el('files-hint').textContent = 'Los adjuntos se guardan en el servidor, así que ' +
+        'para esto hay que abrir la web por su dirección, no como fichero suelto.';
+      el('files-list').innerHTML = '';
+      return;
+    }
+
+    el('files-add').disabled = false;
+    S.ticketFiles(current.id).then(renderFiles);
+  }
+
+  function uploadFiles(fileList) {
+    if (!current || !fileList.length) return;
+
+    // que la ficha exista antes de colgarle nada
+    S.upsert(syncFromForm());
+
+    var pending = Array.prototype.slice.call(fileList);
+    U.toast(pending.length > 1 ? 'Subiendo ' + pending.length + ' ficheros…' : 'Subiendo…');
+
+    pending.reduce(function (chain, file) {
+      return chain.then(function () { return S.uploadFile(current.id, file); });
+    }, Promise.resolve()).then(function () {
+      loadFiles();
+      return S.loadFileCounts();
+    }).then(function () {
+      refresh();
+      U.toast('Adjuntado');
+    }).catch(function (err) {
+      loadFiles();
+      U.toast(err.message);
+    });
   }
 
   /* ── Perfiles ────────────────────────────────────────────── */
@@ -435,6 +504,25 @@
     });
 
     /* Buscador de repuestos */
+    el('files-add').addEventListener('click', function () {
+      el('files-input').value = '';
+      el('files-input').click();
+    });
+
+    el('files-input').addEventListener('change', function () {
+      if (this.files && this.files.length) uploadFiles(this.files);
+    });
+
+    el('files-list').addEventListener('click', function (e) {
+      var button = e.target.closest('[data-remove]');
+      if (!button) return;
+      if (!confirm('¿Quitar este adjunto?')) return;
+      S.deleteFile(button.dataset.remove)
+        .then(function () { loadFiles(); return S.loadFileCounts(); })
+        .then(function () { refresh(); U.toast('Adjunto quitado'); })
+        .catch(function (err) { U.toast(err.message); });
+    });
+
     el('ticket-quote').addEventListener('click', function () {
       var ticket = syncFromForm();
       if (!ticket.model.trim() && !ticket.brand.trim()) {

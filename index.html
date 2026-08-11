@@ -415,6 +415,15 @@
       <div class="summary" id="summary"></div>
     </fieldset>
 
+    <fieldset id="files-block">
+      <legend>Diagnóstico y adjuntos</legend>
+      <p class="hint" id="files-hint">El informe del M360 (u otro diagnóstico), fotos del
+        equipo antes de tocarlo, el resguardo… Se guardan en el servidor, junto a la ficha.</p>
+      <ul id="files-list" class="mini-list"></ul>
+      <button type="button" class="btn btn-ghost" id="files-add">+ Subir PDF o foto</button>
+      <input type="file" id="files-input" accept=".pdf,.png,.jpg,.jpeg,.webp,.heic" multiple hidden>
+    </fieldset>
+
     <fieldset>
       <legend>Notas</legend>
       <textarea name="notes" rows="3" placeholder="Patrón de desbloqueo, detalles del cliente, dónde compraste la pieza…"></textarea>

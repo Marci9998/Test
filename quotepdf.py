@@ -69,7 +69,7 @@ def _txt(value):
 
 # ── el documento ─────────────────────────────────────────────────────
 
-def build(quote, business, profile_name=''):
+def build(quote, business, profile_name='', attachments=None):
     quote = quote or {}
     business = business or {}
     sums = totals(quote)
@@ -82,7 +82,7 @@ def build(quote, business, profile_name=''):
     y = _device(pdf, quote, y)
     y = _lines_table(pdf, quote, y)
     y = _totals(pdf, sums, y)
-    y = _notes(pdf, quote, business, y)
+    y = _notes(pdf, quote, business, y, attachments)
     _footer(pdf, business)
 
     return pdf.build()
@@ -262,11 +262,20 @@ def _totals(pdf, sums, y):
     return y - height - 10
 
 
-def _notes(pdf, quote, business, y):
-    """Notas y condiciones."""
+def _notes(pdf, quote, business, y, attachments=None):
+    """Notas, informe de diagnóstico y condiciones."""
     blocks = []
     if _txt(quote.get('notes')):
         blocks.append(('Notas', _txt(quote.get('notes'))))
+
+    # Si la ficha lleva un informe de diagnóstico, que conste en el papel
+    reports = [f for f in (attachments or []) if f.get('kind') == 'diagnostico']
+    if reports:
+        listado = '; '.join('%s (%s)' % (_txt(f.get('name')), _txt(f.get('uploadedAt')))
+                            for f in reports[:3])
+        blocks.append(('Diagnóstico',
+                       'Se entrega junto a este presupuesto el informe de diagnóstico del '
+                       'equipo: ' + listado + '.'))
     terms = _txt(business.get('terms')) or (
         'Presupuesto sin compromiso. La reparación no empieza hasta que lo apruebes. '
         'Puede haber averías que sólo se ven al abrir el equipo: si aparece algo más, '
