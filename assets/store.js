@@ -367,11 +367,13 @@
   /* ── Ajustes compartidos (tiendas de repuestos) ──────────── */
   var settings = {};
 
+  /* Wallapop va «fuera» de serie porque hace falta tu sesión iniciada,
+     y por el servidor entraría como si no hubieras entrado nunca. */
   var DEFAULT_SHOPS = [
-    { id: 'fuente',  name: 'Repuestos Fuente', url: 'https://www.repuestosfuente.com/buscar?controller=search&s={q}' },
-    { id: 'sentrix', name: 'Mobile Sentrix',   url: 'https://es.mobilesentrix.eu/catalogsearch/result/?q={q}' },
-    { id: 'wallapop', name: 'Wallapop',        url: 'https://es.wallapop.com/app/search?keywords={q}' },
-    { id: 'google',  name: 'Buscar en Google', url: 'https://www.google.com/search?q={q}' }
+    { id: 'fuente',  name: 'Repuestos Fuente', url: 'https://www.repuestosfuente.com/buscar?controller=search&s={q}', mode: 'servidor' },
+    { id: 'sentrix', name: 'Mobile Sentrix',   url: 'https://es.mobilesentrix.eu/catalogsearch/result/?q={q}', mode: 'servidor' },
+    { id: 'wallapop', name: 'Wallapop',        url: 'https://es.wallapop.com/app/search?keywords={q}', mode: 'fuera' },
+    { id: 'google',  name: 'Buscar en Google', url: 'https://www.google.com/search?q={q}', mode: 'servidor' }
   ];
 
   var WALLAPOP_LINKS = [
@@ -392,8 +394,18 @@
 
   function shops() {
     var saved = settings.shops;
-    if (!Array.isArray(saved) || !saved.length) return DEFAULT_SHOPS.slice();
-    return saved;
+    var list = (Array.isArray(saved) && saved.length) ? saved : DEFAULT_SHOPS.slice();
+    return list.map(function (shop) {
+      var copy = Object.assign({}, shop);
+      // «popup» era la marca antigua de «esto ábrelo fuera»
+      if (!copy.mode) copy.mode = copy.popup ? 'fuera' : (remote ? 'servidor' : 'directo');
+      return copy;
+    });
+  }
+
+  /* Pasar la página por el servidor es lo que esquiva el bloqueo de marco */
+  function proxyUrl(url) {
+    return '/api/proxy?url=' + encodeURIComponent(url);
   }
 
   function saveShops(list) {
@@ -517,6 +529,7 @@
 
     shops: shops,
     saveShops: saveShops,
+    proxyUrl: proxyUrl,
 
     prefs: prefs,
     stats: stats,

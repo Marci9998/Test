@@ -2,12 +2,19 @@
    shop.js — mini navegador de repuestos en una esquina
 
    Muchas tiendas (y Wallapop) mandan cabeceras que impiden verse
-   dentro de otra web, y el navegador no deja saber si ha pasado:
-   una página bloqueada y una que ha cargado bien se ven igual desde
-   fuera (las dos dan SecurityError al mirarlas). Por eso no se
-   intenta adivinar: el botón de «abrir fuera» está siempre a mano,
-   y cada tienda se puede marcar para que se abra directamente en
-   una ventana aparte, que sí funciona siempre.
+   dentro de otra web. Cada tienda se abre de una de tres maneras:
+
+     · «Por el servidor»: la página la pide server.py y la sirve desde
+       aquí, así que el navegador ya no la bloquea. Es lo que se usa por
+       defecto cuando hay servidor.
+     · «Directa»: el marco carga la tienda tal cual. Sólo va con las que
+       no bloquean el marco, pero conserva tu sesión y tus cookies.
+     · «Siempre fuera»: ni se intenta; se abre en una ventana aparte.
+       Es lo suyo para Wallapop, que necesita tu sesión iniciada.
+
+   El navegador no deja saber si una web ha bloqueado el marco (una
+   página bloqueada y una buena se ven igual desde fuera), así que el
+   botón de «abrir fuera» está siempre a mano.
    ============================================================ */
 (function (global) {
   'use strict';
@@ -15,8 +22,14 @@
   var S = global.Store;
   var POPUP_NAME = 'taller-repuestos';
 
-  var panel, iframe, sourceSelect, queryInput, quickEl, rememberBox, outLink;
+  var panel, iframe, sourceSelect, queryInput, quickEl, modeSelect, modeHint, outLink;
   var currentUrl = '';
+
+  var MODE_HINTS = {
+    servidor: 'La trae tu servidor, por eso se deja ver aquí',
+    directo: 'Si sale en blanco, esa web bloquea el marco',
+    fuera: 'Esta tienda se abre en una ventana aparte'
+  };
 
   function el(id) { return document.getElementById(id); }
 
@@ -52,19 +65,31 @@
   function load(url) {
     currentUrl = url;
     syncOutLink();
-    var shop = currentShop() || {};
-    rememberBox.checked = !!shop.popup;
 
-    if (shop.popup) {                  // esta tienda va siempre en ventana aparte
+    var shop = currentShop() || {};
+    var mode = shop.mode || 'directo';
+    if (mode === 'servidor' && !S.isRemote()) mode = 'directo';   // sin servidor no hay proxy
+    modeSelect.value = mode;
+    modeHint.textContent = MODE_HINTS[mode] || '';
+
+    if (mode === 'fuera') {
       iframe.removeAttribute('src');
       iframe.srcdoc = '<p style="font:15px system-ui;color:#666;padding:28px;text-align:center;' +
-        'line-height:1.5">' + esc(shop.name || 'Esta tienda') + ' está marcada para abrirse ' +
+        'line-height:1.5">' + esc(shop.name || 'Esta tienda') + ' está puesta para abrirse ' +
         'en una ventana aparte.<br>Dale al botón <b>Abrir fuera ↗</b> de aquí abajo.</p>';
       return;
     }
 
     iframe.removeAttribute('srcdoc');
-    iframe.src = url;
+    if (mode === 'servidor') {
+      // Sin «allow-same-origin»: la tienda llega desde nuestra dirección, así
+      // que sin esto podría leer los datos de la aplicación.
+      iframe.setAttribute('sandbox', 'allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox');
+      iframe.src = S.proxyUrl(url);
+    } else {
+      iframe.setAttribute('sandbox', 'allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox');
+      iframe.src = url;
+    }
   }
 
   /* El botón de abrir fuera es un enlace de verdad: así, si el navegador
@@ -167,7 +192,8 @@
     sourceSelect = el('shop-source');
     queryInput = el('shop-query');
     quickEl = el('shop-quick');
-    rememberBox = el('shop-remember');
+    modeSelect = el('shop-mode');
+    modeHint = el('shop-mode-hint');
 
     renderSources();
     renderQuick();
@@ -192,11 +218,12 @@
       search();
     });
 
-    rememberBox.addEventListener('change', function () {
+    modeSelect.addEventListener('change', function () {
       var shop = currentShop();
       if (!shop) return;
+      var mode = modeSelect.value;
       var list = S.shops().map(function (s) {
-        return s.id === shop.id ? Object.assign({}, s, { popup: rememberBox.checked }) : s;
+        return s.id === shop.id ? Object.assign({}, s, { mode: mode, popup: mode === 'fuera' }) : s;
       });
       S.saveShops(list);
       if (global.UI) global.UI.renderShopSettings();

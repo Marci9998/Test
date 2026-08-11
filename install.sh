@@ -127,6 +127,37 @@ make_user() {
   chown -R "$USER_NAME:$USER_NAME" "$DATA_DIR" 2>/dev/null || true
 }
 
+# Deja un atajo para actualizar sin tener que acordarse de la dirección larga.
+# Recuerda el puerto y las carpetas de esta instalación.
+write_updater() {
+  local url="https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${BRANCH}/install.sh"
+  local target="/usr/local/bin/taller-update"
+
+  mkdir -p /usr/local/bin 2>/dev/null || return 1
+
+  cat > "$target" <<EOF
+#!/usr/bin/env bash
+# Actualiza el Taller a la última versión. Tus fichas no se tocan.
+set -euo pipefail
+
+[ "\$(id -u)" -eq 0 ] || { echo "Usa: sudo taller-update"; exit 1; }
+
+TMP="\$(mktemp)"
+trap 'rm -f "\$TMP"' EXIT
+
+echo "Buscando la última versión…"
+curl -fsSL "${url}" -o "\$TMP" || { echo "No se pudo descargar la actualización"; exit 1; }
+
+TALLER_PORT="\${TALLER_PORT:-${PORT}}" \\
+TALLER_DIR="\${TALLER_DIR:-${APP_DIR}}" \\
+TALLER_DATA="\${TALLER_DATA:-${DATA_DIR}}" \\
+TALLER_BRANCH="\${TALLER_BRANCH:-${BRANCH}}" \\
+  bash "\$TMP" "\$@"
+EOF
+
+  chmod +x "$target"
+}
+
 # systemctl puede estar instalado sin ser el init del sistema (contenedores, WSL…)
 has_systemd() {
   command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]
@@ -192,6 +223,7 @@ uninstall() {
     rm -f "/etc/systemd/system/${SERVICE}.service"
   fi
   rm -rf "$APP_DIR"
+  rm -f /usr/local/bin/taller-update
   ok "Programa borrado."
   info "Tus fichas siguen en ${DATA_DIR} (bórralas a mano si quieres: rm -rf ${DATA_DIR})"
   exit 0
@@ -223,6 +255,10 @@ main() {
   make_user
   ok "Datos en $DATA_DIR"
 
+  if write_updater; then
+    ok "Atajo listo: sudo taller-update"
+  fi
+
   if has_systemd; then
     if write_service; then
       sleep 1
@@ -252,13 +288,12 @@ main() {
   say "  En este equipo : ${BOLD}http://localhost:${PORT}${OFF}"
   say "  Desde el móvil : ${BOLD}http://${ip}:${PORT}${OFF}"
   say ""
+  say "${DIM}  Actualizar     : sudo taller-update${OFF}"
   if has_systemd; then
     say "${DIM}  Parar/arrancar : sudo systemctl stop|start ${SERVICE}"
-    say "  Ver el registro: sudo journalctl -u ${SERVICE} -f"
-    say "  Desinstalar    : curl -fsSL <esta misma url> | sudo bash -s -- --uninstall${OFF}"
-  else
-    say "${DIM}  Desinstalar    : curl -fsSL <esta misma url> | sudo bash -s -- --uninstall${OFF}"
+    say "  Ver el registro: sudo journalctl -u ${SERVICE} -f${OFF}"
   fi
+  say "${DIM}  Desinstalar    : sudo taller-update --uninstall${OFF}"
   say ""
   warn "Cualquiera de tu red puede abrir esa dirección: no lleva contraseña."
   say ""

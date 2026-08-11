@@ -617,10 +617,11 @@ input:focus, select:focus, textarea:focus, .search input:focus {
 .shop-settings { display: grid; gap: 8px; }
 .shop-row {
   display: grid;
-  grid-template-columns: minmax(120px, 1fr) minmax(180px, 2.2fr) auto 32px;
+  grid-template-columns: minmax(120px, 1fr) minmax(180px, 2.2fr) 140px 32px;
   gap: 6px;
   align-items: center;
 }
+.shop-mode-box { margin-top: 0; font-size: 12px; padding: 7px 8px; }
 .shop-row input[type="text"], .shop-row input:not([type]) { margin-top: 0; }
 .shop-row .shop-name, .shop-row .shop-url { margin-top: 0; font-size: 13px; }
 .shop-url { font-family: var(--mono); font-size: 12px !important; }
@@ -732,11 +733,13 @@ a.btn:not([href]) { opacity: .5; pointer-events: none; }
   color: var(--text-faint);
   line-height: 1.3;
 }
-.shop-remember {
-  display: flex; align-items: center; gap: 5px;
-  font-size: 11.5px; color: var(--text-faint); white-space: nowrap;
+.shop-mode-label select {
+  margin-top: 0;
+  padding: 5px 8px;
+  font-size: 11.5px;
+  border-radius: 6px;
+  background: var(--bg-elev);
 }
-.shop-remember input { width: auto; margin: 0; }
 
 /* ───────────────────────── Toast ───────────────────────── */
 .toast {

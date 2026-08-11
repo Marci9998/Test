@@ -13,6 +13,7 @@ si no ~/.local/share/taller). Un fichero JSON por perfil.
 """
 
 import argparse
+import gzip
 import json
 import os
 import re
@@ -22,9 +23,11 @@ import sys
 import threading
 import time
 import unicodedata
+import urllib.error
+import urllib.request
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlparse, unquote
+from urllib.parse import urlparse, unquote, parse_qs, urljoin
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_PORT = 8477          # 8083 lo deja libre a propósito (lo usan otros paneles)
@@ -227,9 +230,13 @@ class Handler(BaseHTTPRequestHandler):
         self._route('DELETE')
 
     def _route(self, method):
-        path = unquote(urlparse(self.path).path)
+        parsed = urlparse(self.path)
+        path = unquote(parsed.path)
         try:
-            if path.startswith('/api/'):
+            # El proxy tarda lo que tarde la tienda: no puede bloquear al resto
+            if path == '/api/proxy' and method == 'GET':
+                self._proxy(parsed.query)
+            elif path.startswith('/api/'):
                 with _lock:
                     self._api(method, path)
             elif method == 'GET':
@@ -296,6 +303,78 @@ class Handler(BaseHTTPRequestHandler):
 
         return self._error(404, 'Ruta desconocida')
 
+    # — proxy de tiendas —
+
+    def _proxy(self, query):
+        """Trae una página de una tienda y la sirve desde aquí.
+
+        Casi todas las tiendas mandan cabeceras (X-Frame-Options,
+        Content-Security-Policy) que impiden verse dentro de otra web. Al pasar
+        por aquí la página llega desde nuestra propia dirección y el navegador
+        ya no la bloquea. Sólo se permiten las tiendas configuradas.
+        """
+        params = parse_qs(query or '')
+        url = (params.get('url') or [''])[0]
+
+        try:
+            target = check_target(url, self.storage.settings())
+        except ValueError as err:
+            return self._proxy_error(str(err))
+
+        request = urllib.request.Request(target, headers={
+            'User-Agent': BROWSER_UA,
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,'
+                      'image/webp,*/*;q=0.8',
+            'Accept-Language': 'es-ES,es;q=0.9',
+            'Accept-Encoding': 'gzip, identity',
+        })
+
+        try:
+            with urllib.request.urlopen(request, timeout=PROXY_TIMEOUT) as response:
+                final_url = response.geturl()
+                # tras una redirección el destino también tiene que estar permitido
+                check_target(final_url, self.storage.settings())
+                raw = response.read(PROXY_MAX_BYTES + 1)
+                content_type = response.headers.get('Content-Type', 'application/octet-stream')
+                if response.headers.get('Content-Encoding') == 'gzip':
+                    try:
+                        raw = gzip.decompress(raw)
+                    except OSError:
+                        pass
+        except urllib.error.HTTPError as err:
+            return self._proxy_error('La tienda respondió con un error %s.' % err.code)
+        except ValueError as err:
+            return self._proxy_error(str(err))
+        except Exception as err:                       # noqa: BLE001
+            return self._proxy_error('No se pudo conectar con la tienda (%s).'
+                                     % type(err).__name__)
+
+        if len(raw) > PROXY_MAX_BYTES:
+            return self._proxy_error('La página pesa demasiado para verla aquí dentro.')
+
+        if 'html' not in content_type.lower():
+            return self._send(200, raw, content_type)
+
+        charset = 'utf-8'
+        if 'charset=' in content_type.lower():
+            charset = content_type.lower().split('charset=')[1].split(';')[0].strip() or 'utf-8'
+        try:
+            html = raw.decode(charset, errors='replace')
+        except LookupError:
+            html = raw.decode('utf-8', errors='replace')
+
+        proxy_base = 'http://%s/api/proxy?url=' % (self.headers.get('Host') or 'localhost')
+        self._send(200, prepare_html(html, final_url, proxy_base), 'text/html; charset=utf-8')
+
+    def _proxy_error(self, message):
+        page = ('<!doctype html><meta charset="utf-8">'
+                '<div style="font:15px/1.5 system-ui;color:#555;padding:28px;text-align:center">'
+                '<p><b>No se ha podido traer la página.</b></p><p>%s</p>'
+                '<p style="color:#888;font-size:13px">Prueba con el botón '
+                '<b>Abrir fuera ↗</b> de aquí abajo.</p></div>'
+                % html_escape(message))
+        self._send(200, page, 'text/html; charset=utf-8')
+
     # — ficheros de la web —
 
     def _static(self, path):
@@ -316,6 +395,138 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         if os.environ.get('TALLER_VERBOSE'):
             sys.stderr.write('%s - %s\n' % (self.address_string(), fmt % args))
+
+
+# ───────────────────────── ayudas del proxy ─────────────────────────
+
+BROWSER_UA = ('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) '
+              'Chrome/124.0 Safari/537.36')
+PROXY_TIMEOUT = 20
+PROXY_MAX_BYTES = 6 * 1024 * 1024
+
+# Dominios permitidos aunque el usuario no haya guardado sus tiendas todavía.
+# Tienen que coincidir con DEFAULT_SHOPS de assets/store.js.
+DEFAULT_HOSTS = (
+    'repuestosfuente.com',
+    'mobilesentrix.eu',
+    'mobilesentrix.com',
+    'wallapop.com',
+    'google.com',
+)
+
+PRIVATE_HOST = re.compile(
+    r'^(localhost|127\.|0\.|10\.|192\.168\.|169\.254\.|::1|\[|'
+    r'172\.(1[6-9]|2\d|3[01])\.)', re.I)
+
+
+def html_escape(text):
+    return (str(text).replace('&', '&amp;').replace('<', '&lt;')
+            .replace('>', '&gt;').replace('"', '&quot;'))
+
+
+def allowed_hosts(settings):
+    """Dominios que se pueden pedir: los de las tiendas configuradas.
+
+    Devuelve (dominios, exactos): los primeros aceptan subdominios; los
+    segundos son los hosts tal cual los escribió el usuario.
+    """
+    domains = set(DEFAULT_HOSTS)
+    exact = set()
+    for shop in (settings or {}).get('shops') or []:
+        host = urlparse(str(shop.get('url') or '')).hostname or ''
+        if not host:
+            continue
+        exact.add(host)
+        # nos quedamos con el dominio de segundo nivel para aceptar subdominios
+        parts = [p for p in host.split('.') if p]
+        if len(parts) >= 2:
+            domains.add('.'.join(parts[-2:]))
+    return domains, exact
+
+
+def check_target(url, settings):
+    """Comprueba que la dirección se puede pedir. Devuelve la url o revienta."""
+    url = (url or '').strip()
+    if not url:
+        raise ValueError('Falta la dirección.')
+    parsed = urlparse(url)
+    if parsed.scheme not in ('http', 'https'):
+        raise ValueError('Sólo se pueden abrir direcciones http o https.')
+    host = parsed.hostname or ''
+    if not host:
+        raise ValueError('Esa dirección no se puede abrir desde aquí.')
+
+    domains, exact = allowed_hosts(settings)
+
+    # Una dirección de la red de casa sólo vale si es exactamente una tienda
+    # que se ha configurado a mano; así el proxy no sirve para husmear la red.
+    if PRIVATE_HOST.match(host):
+        if host in exact:
+            return url
+        raise ValueError('Esa dirección no se puede abrir desde aquí.')
+
+    if host in exact:
+        return url
+    for allowed in domains:
+        if host == allowed or host.endswith('.' + allowed):
+            return url
+    raise ValueError('«%s» no está en tus tiendas. Añádela en Datos → Tiendas '
+                     'de repuestos y vuelve a probar.' % host)
+
+
+# Le quitamos a la página sus propias reglas de bloqueo por marco
+META_BLOCK = re.compile(
+    r'<meta[^>]+http-equiv\s*=\s*["\']?(content-security-policy|x-frame-options)'
+    r'["\']?[^>]*>', re.I)
+HEAD_OPEN = re.compile(r'<head[^>]*>', re.I)
+
+
+def prepare_html(html, base_url, proxy_base):
+    """Prepara la página de la tienda para verse dentro del panel.
+
+    · <base> para que sus imágenes, estilos y scripts sigan saliendo de la
+      tienda (eso el navegador no lo bloquea, sólo bloquea el marco).
+    · un script que hace que los enlaces y las búsquedas de dentro sigan
+      pasando por aquí, para poder navegar por la tienda.
+    """
+    html = META_BLOCK.sub('', html)
+
+    inject_head = '<base href="%s">' % html_escape(base_url)
+    match = HEAD_OPEN.search(html)
+    if match:
+        html = html[:match.end()] + inject_head + html[match.end():]
+    else:
+        html = inject_head + html
+
+    script = """
+<script>(function () {
+  var P = %s;
+  function via(u) { return P + encodeURIComponent(u); }
+  document.addEventListener('click', function (e) {
+    var a = e.target && e.target.closest && e.target.closest('a[href]');
+    if (!a || (a.target && a.target !== '_self')) return;
+    var href = a.href || '';
+    if (!/^https?:/i.test(href)) return;
+    e.preventDefault();
+    location.href = via(href);
+  }, true);
+  document.addEventListener('submit', function (e) {
+    var f = e.target;
+    if (!f || (f.method && f.method.toLowerCase() === 'post')) return;
+    var action = f.action || '';
+    if (!/^https?:/i.test(action)) return;
+    e.preventDefault();
+    var data = new URLSearchParams(new FormData(f)).toString();
+    location.href = via(action + (action.indexOf('?') > -1 ? '&' : '?') + data);
+  }, true);
+})();</script>
+""" % json.dumps(proxy_base)
+
+    if re.search(r'</body>', html, re.I):
+        html = re.sub(r'</body>', script + '</body>', html, count=1, flags=re.I)
+    else:
+        html += script
+    return html
 
 
 def safe_id(value):

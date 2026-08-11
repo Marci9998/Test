@@ -127,8 +127,11 @@
       </header>
       <p class="hint">
         El <code>{q}</code> es lo que se busca (modelo + pieza). Si una tienda cambia su buscador,
-        cambia aquí la dirección y listo. Marca <em>ventana aparte</em> para las que no se dejan
-        ver dentro de la web (muchas lo bloquean a propósito).
+        cambia aquí la dirección y listo.<br>
+        <b>Por el servidor</b>: la página la trae tu servidor, y así se deja ver aquí dentro aunque
+        la tienda lo bloquee (es lo normal). <b>Directa</b>: el marco la carga tal cual, conserva tu
+        sesión, pero muchas salen en blanco. <b>Ventana aparte</b>: se abre fuera, que es lo suyo
+        para Wallapop porque necesita tu sesión iniciada.
       </p>
       <div id="shop-settings" class="shop-settings"></div>
       <div class="row-btns" style="margin-top:12px">
@@ -346,10 +349,15 @@
   </div>
 
   <footer class="shop-foot">
-    <span class="shop-foot-text">¿Sale en blanco? Esa web no se deja ver aquí dentro</span>
-    <label class="shop-remember" title="Recordar para esta tienda">
-      <input type="checkbox" id="shop-remember"> siempre fuera
+    <label class="shop-mode-label" title="Cómo abrir esta tienda">
+      <span class="sr-only">Cómo abrir esta tienda</span>
+      <select id="shop-mode">
+        <option value="servidor">Por el servidor</option>
+        <option value="directo">Directa</option>
+        <option value="fuera">Siempre fuera</option>
+      </select>
     </label>
+    <span class="shop-foot-text" id="shop-mode-hint"></span>
     <a class="btn btn-primary sm" id="shop-blocked-open" target="_blank" rel="noopener">Abrir fuera ↗</a>
   </footer>
 </section>

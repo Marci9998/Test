@@ -269,8 +269,13 @@
       return '<div class="shop-row" data-shop="' + esc(shop.id) + '">' +
         '<input class="shop-name" value="' + esc(shop.name) + '" placeholder="Nombre" aria-label="Nombre de la tienda">' +
         '<input class="shop-url" value="' + esc(shop.url) + '" placeholder="https://…/buscar?q={q}" aria-label="Dirección de búsqueda">' +
-        '<label class="shop-popup"><input type="checkbox" class="shop-popup-box"' +
-          (shop.popup ? ' checked' : '') + '> ventana aparte</label>' +
+        '<select class="shop-mode-box" aria-label="Cómo abrir esta tienda">' +
+          ['servidor', 'directo', 'fuera'].map(function (mode) {
+            var labels = { servidor: 'por el servidor', directo: 'directa', fuera: 'ventana aparte' };
+            return '<option value="' + mode + '"' + (shop.mode === mode ? ' selected' : '') + '>' +
+              labels[mode] + '</option>';
+          }).join('') +
+        '</select>' +
         '<button type="button" class="part-del" data-action="remove-shop" aria-label="Quitar tienda" ' +
           'data-index="' + i + '">×</button>' +
       '</div>';

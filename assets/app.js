@@ -294,7 +294,8 @@
         id: row.dataset.shop,
         name: row.querySelector('.shop-name').value.trim() || 'Tienda',
         url: row.querySelector('.shop-url').value.trim(),
-        popup: row.querySelector('.shop-popup-box').checked
+        mode: row.querySelector('.shop-mode-box').value,
+        popup: row.querySelector('.shop-mode-box').value === 'fuera'
       };
     }).filter(function (shop) { return shop.url; });
 

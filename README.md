@@ -26,10 +26,21 @@ curl -fsSL <la misma url> | sudo TALLER_PORT=9000 bash
 | `TALLER_DIR` | Dónde se instala el programa | `/opt/taller` |
 | `TALLER_DATA` | Dónde se guardan tus fichas | `/var/lib/taller` |
 
+### Actualizar
+
+```bash
+sudo taller-update
+```
+
+El instalador deja ese atajo puesto. Se trae la última versión, recuerda el puerto y las
+carpetas que elegiste, y **no toca tus fichas**: los datos viven en `/var/lib/taller`, aparte
+del programa. Si prefieres no usar el atajo, vale con volver a lanzar el comando de instalar:
+hace exactamente lo mismo.
+
 ```bash
 sudo systemctl status taller      # ¿va bien?
 sudo journalctl -u taller -f      # ver qué hace
-curl -fsSL <la misma url> | sudo bash -s -- --uninstall
+sudo taller-update --uninstall    # desinstalar
 ```
 
 Desinstalar borra el programa pero **no** tus fichas (siguen en `/var/lib/taller`).
@@ -82,17 +93,26 @@ Mobile Sentrix, Wallapop o Google. El panel se arrastra por su barra de título 
 redimensiona por la esquina; con la ficha abierta se coloca a su izquierda para poder
 copiar el precio sin tapar nada.
 
-**Aviso importante y honesto**: bastantes tiendas —y Wallapop casi seguro— mandan
-cabeceras (`X-Frame-Options` / `Content-Security-Policy`) que impiden verse dentro de otra
-web. Cuando pasa eso el marco sale en blanco, y *el navegador no permite detectarlo*: una
-página bloqueada y una que ha cargado bien son indistinguibles desde fuera. Por eso hay
-siempre a mano un botón **«Abrir fuera ↗»**, que la abre en una ventana pequeña al lado (y
-si el navegador bloquea las ventanas emergentes, en una pestaña nueva: es un enlace de
-verdad, no se queda en nada), y una casilla **«siempre fuera»** para marcar esa tienda y
-dejar de pelearte con el marco en blanco.
+Bastantes tiendas —y Wallapop— mandan cabeceras (`X-Frame-Options` /
+`Content-Security-Policy`) que impiden verse dentro de otra web: por eso el marco sale en
+blanco o con un *refused to connect*. Cada tienda se puede abrir de tres maneras, y se
+elige abajo del panel (o en **Datos → Tiendas**):
 
-Los botones **Mis ventas** y **Mensajes** van a tu Wallapop, y se abren siempre fuera
-porque necesitan tu sesión iniciada.
+| Modo | Qué hace | Cuándo |
+|---|---|---|
+| **Por el servidor** | La página la pide `server.py` y te la sirve él. Como llega desde tu propia dirección, el navegador ya no la bloquea. | Lo normal para tiendas de repuestos. Es el modo de fábrica. |
+| **Directa** | El marco carga la tienda tal cual, con tus cookies y tu sesión. | Cuando la tienda no bloquea el marco. |
+| **Siempre fuera** | Ni se intenta: se abre en una ventana aparte. | Wallapop y cualquier cosa que necesite tu sesión. |
+
+Detalles de «por el servidor», para que sepas qué esperar: sólo pasan por ahí los dominios
+de las tiendas que tengas configuradas; los enlaces y las búsquedas de dentro siguen
+navegando por el panel; y **no lleva tu sesión** (entra como si fueras un visitante
+cualquiera), así que sirve para mirar piezas y precios, no para entrar en tu cuenta. Si una
+tienda usa Cloudflare o similar, puede que te dé error igualmente: para eso está el botón
+**«Abrir fuera ↗»**, que sigue estando siempre a mano.
+
+Los botones **Mis ventas** y **Mensajes** van a tu Wallapop y se abren siempre fuera, por lo
+mismo: necesitan tu sesión iniciada.
 
 Las direcciones de las tiendas se editan en **Datos → Tiendas de repuestos**. El `{q}` es
 lo que se busca. Si una tienda cambia su buscador o quieres añadir otra (AliExpress, tu
@@ -142,8 +162,8 @@ Sin servidor, los datos viven sólo en ese navegador: si lo limpias, se van. Des
 Sin dependencias, sin compilar nada, sin base de datos. Python 3 de serie y JavaScript a pelo:
 
 ```
-install.sh     instalador (systemd + usuario propio + servicio)
-server.py      servidor y API; guarda un JSON por perfil
+install.sh     instalador (systemd + usuario propio + servicio + atajo de actualizar)
+server.py      servidor, API y proxy de tiendas; guarda un JSON por perfil
 index.html
 assets/
   styles.css   estilos y tema claro/oscuro
@@ -164,4 +184,5 @@ DELETE /api/profiles/<id>
 GET    /api/profiles/<id>/tickets
 PUT    /api/profiles/<id>/tickets [ …fichas… ]
 GET    /api/settings              PUT /api/settings            {shops:[…]}
+GET    /api/proxy?url=…          (sólo dominios de tus tiendas)
 ```
