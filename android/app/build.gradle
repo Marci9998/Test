@@ -1,0 +1,32 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.marci.taller'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.marci.taller"
+        minSdk 24              // Android 7 en adelante
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            // se firma con la clave de depuración: suficiente para instalarlo
+            // en tus propios móviles, no vale para publicar en Google Play
+            signingConfig signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies { }

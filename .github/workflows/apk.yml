@@ -1,0 +1,38 @@
+name: Construir el APK
+
+# Cada vez que cambia la aplicación de Android, GitHub compila el APK y lo
+# deja para descargar. Se puede lanzar también a mano desde la pestaña
+# «Actions» → «Construir el APK» → «Run workflow».
+on:
+  push:
+    paths:
+      - 'android/**'
+      - '.github/workflows/apk.yml'
+  workflow_dispatch:
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Preparar Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Preparar Android
+        uses: android-actions/setup-android@v3
+
+      - name: Compilar
+        working-directory: android
+        run: gradle assembleRelease --no-daemon
+
+      - name: Guardar el APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: taller-apk
+          path: android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error

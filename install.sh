@@ -113,7 +113,12 @@ install_files() {
   rm -rf "${APP_DIR:?}/assets"
   cp -a "$src/server.py" "$src/index.html" "$APP_DIR/"
   cp -a "$src/assets" "$APP_DIR/"
-  [ -f "$src/README.md" ] && cp -a "$src/README.md" "$APP_DIR/" || true
+
+  # lo que hace falta para añadirla a la pantalla de inicio del móvil
+  for extra in manifest.webmanifest sw.js README.md; do
+    [ -f "$src/$extra" ] && cp -a "$src/$extra" "$APP_DIR/"
+  done
+
   chmod +x "$APP_DIR/server.py"
 }
 

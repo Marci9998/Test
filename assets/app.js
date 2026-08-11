@@ -450,6 +450,25 @@
 
     el('profile-new').addEventListener('click', function () { openProfileModal(null); });
 
+    el('account-new').addEventListener('click', newAccount);
+
+    el('account-logout').addEventListener('click', function () {
+      if (!confirm('¿Salir de la cuenta?')) return;
+      S.logout().then(function () {
+        showWelcome('login');
+        U.toast('Hasta luego');
+      });
+    });
+
+    el('account-list').addEventListener('click', function (e) {
+      var button = e.target.closest('button[data-user]');
+      if (!button) return;
+      if (!confirm('¿Quitarle el acceso a esta persona?')) return;
+      S.deleteUser(button.dataset.user)
+        .then(function () { renderAccount(); U.toast('Acceso quitado'); })
+        .catch(function (err) { U.toast(err.message); });
+    });
+
     el('profile-list').addEventListener('click', function (e) {
       var button = e.target.closest('button[data-action]');
       if (!button) return;
@@ -553,31 +572,189 @@
     });
   }
 
+  /* ── Bienvenida / entrar ─────────────────────────────────── */
+  function showWelcome(mode) {
+    var setup = mode === 'setup';
+    el('welcome').hidden = false;
+    el('welcome-setup').hidden = !setup;
+    el('welcome-login').hidden = setup;
+    el('field-name').hidden = !setup;
+    el('field-password2').hidden = !setup;
+    el('welcome-submit').textContent = setup ? 'Crear mi cuenta' : 'Entrar';
+    el('welcome-error').hidden = true;
+    el('welcome-note').textContent = setup
+      ? 'La cuenta se queda en tu servidor. Si se te olvida la contraseña se puede borrar el fichero users.json y volver a empezar.'
+      : '';
+
+    var pass = el('welcome-form').querySelector('[name="password"]');
+    pass.setAttribute('autocomplete', setup ? 'new-password' : 'current-password');
+
+    document.body.classList.remove('is-booting');
+    document.body.classList.add('is-locked');
+    setTimeout(function () {
+      var first = el('welcome-form').querySelector(setup ? '[name="name"]' : '[name="login"]');
+      if (first) first.focus();
+    }, 80);
+  }
+
+  function hideWelcome() {
+    el('welcome').hidden = true;
+    document.body.classList.remove('is-locked');
+  }
+
+  function revealApp() {
+    document.body.classList.remove('is-booting', 'is-locked');
+  }
+
+  function showOffline() {
+    el('offline').hidden = false;
+    document.body.classList.remove('is-booting');
+    document.body.classList.add('is-locked');
+  }
+
+  function welcomeError(message) {
+    var node = el('welcome-error');
+    node.textContent = message;
+    node.hidden = false;
+  }
+
+  function submitWelcome(e) {
+    if (e) e.preventDefault();
+    var form = el('welcome-form');
+    var setup = !el('welcome-setup').hidden;
+    var fields = {
+      name: form.name.value.trim(),
+      login: form.login.value.trim().toLowerCase(),
+      password: form.password.value
+    };
+
+    if (setup) {
+      if (fields.password.length < 6) return welcomeError('La contraseña necesita al menos 6 caracteres.');
+      if (fields.password !== form.password2.value) return welcomeError('Las dos contraseñas no son iguales.');
+    }
+
+    var button = el('welcome-submit');
+    button.disabled = true;
+    (setup ? S.register(fields) : S.login(fields))
+      .then(function () { return S.loadData(); })
+      .then(function () {
+        form.reset();
+        hideWelcome();
+        startApp();
+        U.toast(setup ? '¡Listo! Bienvenido' : 'Hola de nuevo');
+      })
+      .catch(function (err) { welcomeError(err.message); })
+      .then(function () { button.disabled = false; });
+  }
+
+  /* ── Cuentas (pestaña Datos) ─────────────────────────────── */
+  function renderAccount() {
+    var auth = S.auth();
+    var card = el('account-card');
+    card.hidden = !auth.enabled;
+    if (!auth.enabled || !auth.user) return;
+
+    el('account-who').textContent = auth.user.name + ' · ' + auth.user.role;
+    var isOwner = auth.user.role === 'dueño';
+    el('account-new').hidden = !isOwner;
+
+    S.users().then(function (list) {
+      el('account-list').innerHTML = list.map(function (u) {
+        var self = u.id === auth.user.id;
+        return '<li>' +
+          '<div class="mini-main">' +
+            '<div class="mini-title">' + U.esc(u.name) + (self ? ' <span class="tag">tú</span>' : '') + '</div>' +
+            '<div class="mini-sub">' + U.esc(u.login) + ' · ' + U.esc(u.role) + '</div>' +
+          '</div>' +
+          (isOwner && !self ? '<button class="btn sm btn-danger-ghost" data-user="' + U.esc(u.id) + '">Quitar</button>' : '') +
+        '</li>';
+      }).join('');
+    }).catch(function () { /* si no se puede, la tarjeta se queda con lo básico */ });
+  }
+
+  function newAccount() {
+    var name = prompt('Nombre de la persona:');
+    if (name === null) return;
+    var login = prompt('Usuario con el que entrará (letras y números):');
+    if (login === null) return;
+    var password = prompt('Contraseña para esa cuenta (mínimo 6):');
+    if (password === null) return;
+
+    S.register({ name: name, login: login, password: password, role: 'ayudante' })
+      .then(function () { renderAccount(); U.toast('Cuenta creada'); })
+      .catch(function (err) { alert(err.message); });
+  }
+
   /* ── Arranque ────────────────────────────────────────────── */
+  var wired = false;
+
+  function startApp() {
+    revealApp();
+    if (!wired) { wire(); Shop.init(); wired = true; }
+    refresh();
+    U.renderShopSettings();
+    U.renderStorageInfo();
+    renderAccount();
+
+    var view = S.prefs().view;
+    showView(['panel', 'fichas', 'datos'].indexOf(view) > -1 ? view : 'panel');
+  }
+
   function init() {
     initTheme();
-    S.onError(function (message) { U.toast(message); });
+    S.onError(function (message) {
+      if (/Entra con tu cuenta/i.test(message)) return showWelcome('login');
+      U.toast(message);
+    });
+
+    el('welcome-form').addEventListener('submit', submitWelcome);
+
+    el('offline-retry').addEventListener('click', function () {
+      el('offline-retry').disabled = true;
+      location.reload();
+    });
 
     S.init().then(function (info) {
-      wire();
-      Shop.init();
-      refresh();
-      U.renderShopSettings();
-      U.renderStorageInfo();
+      var auth = info.auth || {};
 
-      var view = S.prefs().view;
-      showView(['panel', 'fichas', 'datos'].indexOf(view) > -1 ? view : 'panel');
-
-      if (!info.remote && location.protocol !== 'file:') {
-        U.toast('Sin servidor: los datos se guardan sólo en este navegador');
+      if (auth.enabled && !auth.user) {
+        // sin haber entrado no se enseña nada de dentro
+        wire();
+        Shop.init();
+        wired = true;
+        showWelcome(auth.needsSetup ? 'setup' : 'login');
+        return;
       }
+
+      // Servida por http pero sin servidor detrás: es una caída de conexión,
+      // no el modo «fichero suelto». Mejor decirlo que enseñar un taller vacío.
+      if (!info.remote && location.protocol !== 'file:') {
+        return showOffline();
+      }
+
+      startApp();
     }).catch(function (err) {
       console.error(err);
+      revealApp();
       document.body.insertAdjacentHTML('afterbegin',
         '<p class="empty">No se pudieron cargar los datos: ' + U.esc(err.message) + '</p>');
     });
   }
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
-  else init();
+  /* Para que abra aunque el servidor tarde. El navegador sólo lo permite en
+     sitios seguros (https o localhost); por http en la red de casa se lo
+     salta sin quejarse, y la aplicación funciona igual. */
+  function registerWorker() {
+    if (!('serviceWorker' in navigator) || !global.isSecureContext) return;
+    navigator.serviceWorker.register('sw.js').catch(function (err) {
+      console.info('Sin modo sin conexión:', err && err.message);
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function () { init(); registerWorker(); });
+  } else {
+    init();
+    registerWorker();
+  }
 })(window);

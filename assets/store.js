@@ -194,6 +194,54 @@
     ]);
   }
 
+  /* ── Cuentas ─────────────────────────────────────────────── */
+  var auth = { needsSetup: false, user: null, enabled: false };
+
+  function authStatus() {
+    if (!remote) {
+      auth = { needsSetup: false, user: null, enabled: false };
+      return Promise.resolve(auth);
+    }
+    return api('/auth/status').then(function (data) {
+      auth = {
+        needsSetup: !!(data && data.needsSetup),
+        user: (data && data.user) || null,
+        enabled: true
+      };
+      return auth;
+    }).catch(function () {
+      auth = { needsSetup: false, user: null, enabled: false };
+      return auth;
+    });
+  }
+
+  function register(fields) {
+    return api('/auth/register', { method: 'POST', body: fields }).then(function (user) {
+      // sólo la primera cuenta entra sola; las demás las crea el dueño
+      if (!auth.user) { auth.user = user; auth.needsSetup = false; }
+      return user;
+    });
+  }
+
+  function login(fields) {
+    return api('/auth/login', { method: 'POST', body: fields }).then(function (user) {
+      auth.user = user;
+      auth.needsSetup = false;
+      return user;
+    });
+  }
+
+  function logout() {
+    return api('/auth/logout', { method: 'POST' }).then(function () {
+      auth.user = null;
+      return true;
+    });
+  }
+
+  function users() { return api('/auth/users'); }
+
+  function deleteUser(id) { return api('/auth/users/' + id, { method: 'DELETE' }); }
+
   /* ── Perfiles ────────────────────────────────────────────── */
   var profiles = [];
   var activeId = null;
@@ -474,16 +522,26 @@
   function init() {
     return detectServer().then(function (found) {
       remote = found;
-      return loadProfiles();
+      return authStatus();
+    }).then(function (status) {
+      // sin haber entrado no se pide nada más: lo decide la pantalla de bienvenida
+      if (status.enabled && !status.user) return null;
+      return loadData();
     }).then(function () {
+      return { remote: remote, auth: auth, profile: activeProfile(),
+               tickets: tickets.length };
+    });
+  }
+
+  /* Carga lo del usuario que acaba de entrar (o de arrancar sin cuentas) */
+  function loadData() {
+    return loadProfiles().then(function () {
       if (!profiles.length) return createProfile('Mi taller');
     }).then(function () {
       var saved = prefs().profile;
       activeId = profiles.some(function (p) { return p.id === saved; }) ? saved : profiles[0].id;
       prefs({ profile: activeId });
       return Promise.all([loadTickets(), loadSettings()]);
-    }).then(function () {
-      return { remote: remote, profile: activeProfile(), tickets: tickets.length };
     });
   }
 
@@ -508,7 +566,15 @@
     title: title,
 
     init: init,
+    loadData: loadData,
     isRemote: function () { return remote; },
+    auth: function () { return auth; },
+    authStatus: authStatus,
+    register: register,
+    login: login,
+    logout: logout,
+    users: users,
+    deleteUser: deleteUser,
     onError: function (fn) { onError = fn || function () {}; },
     flush: flush,
 

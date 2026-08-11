@@ -13,10 +13,14 @@ si no ~/.local/share/taller). Un fichero JSON por perfil.
 """
 
 import argparse
+import base64
 import gzip
+import hashlib
+import hmac
 import json
 import os
 import re
+import secrets
 import shutil
 import socket
 import sys
@@ -26,11 +30,15 @@ import unicodedata
 import urllib.error
 import urllib.request
 import uuid
+from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, unquote, parse_qs, urljoin
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_PORT = 8477          # 8083 lo deja libre a propósito (lo usan otros paneles)
+COOKIE_NAME = 'taller_sesion'
+SESSION_DAYS = 30
+PBKDF2_ROUNDS = 210000
 FORBIDDEN_PORTS = {8083}
 MAX_BODY = 8 * 1024 * 1024   # 8 MB de fichas es muchísimo; corta ahí
 
@@ -163,6 +171,101 @@ class Storage:
             except OSError:
                 pass
 
+    # — cuentas y sesiones —
+
+    def users(self):
+        data = self._read_json(os.path.join(self.dir, 'users.json'), [])
+        return data if isinstance(data, list) else []
+
+    def save_users(self, users):
+        self._write_json(os.path.join(self.dir, 'users.json'), users)
+        # las cuentas no las tiene que poder leer cualquiera del sistema
+        try:
+            os.chmod(os.path.join(self.dir, 'users.json'), 0o600)
+        except OSError:
+            pass
+
+    def find_user(self, login):
+        login = (login or '').strip().lower()
+        for user in self.users():
+            if user.get('login') == login:
+                return user
+        return None
+
+    def create_user(self, name, login, password, role='dueño'):
+        login = (login or '').strip().lower()
+        if not re.fullmatch(r'[a-z0-9._-]{3,32}', login or ''):
+            raise ValueError('El usuario admite de 3 a 32 letras, números, punto, guion o guion bajo.')
+        if len(password or '') < 6:
+            raise ValueError('La contraseña necesita al menos 6 caracteres.')
+        if self.find_user(login):
+            raise ValueError('Ya hay una cuenta con ese usuario.')
+
+        users = self.users()
+        user = {
+            'id': uuid.uuid4().hex[:12],
+            'name': (name or '').strip()[:60] or login,
+            'login': login,
+            'role': role,
+            'createdAt': time.strftime('%Y-%m-%d'),
+        }
+        user.update(hash_password(password))
+        users.append(user)
+        self.save_users(users)
+        return user
+
+    def delete_user(self, user_id):
+        users = self.users()
+        rest = [u for u in users if u['id'] != user_id]
+        if len(rest) == len(users):
+            return False
+        if not rest:
+            raise ValueError('Tiene que quedar al menos una cuenta.')
+        self.save_users(rest)
+        # fuera las sesiones de quien ya no existe
+        sessions = self.sessions()
+        for token in [t for t, s in sessions.items() if s.get('user') == user_id]:
+            sessions.pop(token, None)
+        self.save_sessions(sessions)
+        return True
+
+    def sessions(self):
+        data = self._read_json(os.path.join(self.dir, 'sessions.json'), {})
+        if not isinstance(data, dict):
+            return {}
+        now = time.time()
+        return {t: s for t, s in data.items() if s.get('exp', 0) > now}
+
+    def save_sessions(self, sessions):
+        self._write_json(os.path.join(self.dir, 'sessions.json'), sessions)
+        try:
+            os.chmod(os.path.join(self.dir, 'sessions.json'), 0o600)
+        except OSError:
+            pass
+
+    def open_session(self, user_id):
+        token = secrets.token_urlsafe(32)
+        sessions = self.sessions()
+        sessions[token] = {'user': user_id, 'exp': time.time() + SESSION_DAYS * 86400}
+        self.save_sessions(sessions)
+        return token
+
+    def close_session(self, token):
+        sessions = self.sessions()
+        if sessions.pop(token, None) is not None:
+            self.save_sessions(sessions)
+
+    def user_of_session(self, token):
+        if not token:
+            return None
+        session = self.sessions().get(token)
+        if not session:
+            return None
+        for user in self.users():
+            if user['id'] == session['user']:
+                return user
+        return None
+
     # — ajustes (tiendas, etc.) —
 
     def settings(self):
@@ -181,6 +284,8 @@ class Handler(BaseHTTPRequestHandler):
 
     # — respuestas —
 
+    _extra_headers = None
+
     def _send(self, status, body=b'', content_type='application/json; charset=utf-8', extra=None):
         if isinstance(body, str):
             body = body.encode('utf-8')
@@ -188,7 +293,9 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Content-Type', content_type)
         self.send_header('Content-Length', str(len(body)))
         self.send_header('Cache-Control', 'no-store')
-        for key, value in (extra or {}).items():
+        headers = dict(self._extra_headers or {})
+        headers.update(extra or {})
+        for key, value in headers.items():
             self.send_header(key, value)
         self.end_headers()
         if self.command != 'HEAD':
@@ -232,9 +339,12 @@ class Handler(BaseHTTPRequestHandler):
     def _route(self, method):
         parsed = urlparse(self.path)
         path = unquote(parsed.path)
+        self._extra_headers = {}
         try:
             # El proxy tarda lo que tarde la tienda: no puede bloquear al resto
             if path == '/api/proxy' and method == 'GET':
+                if self.storage.users() and not self.current_user():
+                    return self._error(401, 'Entra con tu cuenta.')
                 self._proxy(parsed.query)
             elif path.startswith('/api/'):
                 with _lock:
@@ -251,11 +361,112 @@ class Handler(BaseHTTPRequestHandler):
 
     # — API —
 
+    # — cuentas —
+
+    def _cookie_token(self):
+        raw = self.headers.get('Cookie')
+        if not raw:
+            return ''
+        try:
+            cookie = SimpleCookie()
+            cookie.load(raw)
+        except Exception:                              # noqa: BLE001
+            return ''
+        morsel = cookie.get(COOKIE_NAME)
+        return morsel.value if morsel else ''
+
+    def current_user(self):
+        return self.storage.user_of_session(self._cookie_token())
+
+    @staticmethod
+    def public_user(user):
+        return {'id': user['id'], 'name': user['name'],
+                'login': user['login'], 'role': user.get('role', 'dueño')}
+
+    def _set_session_cookie(self, token):
+        self._extra_headers['Set-Cookie'] = (
+            '%s=%s; Path=/; HttpOnly; SameSite=Lax; Max-Age=%d'
+            % (COOKIE_NAME, token, SESSION_DAYS * 86400))
+
+    def _auth(self, method, parts):
+        storage = self.storage
+        users = storage.users()
+
+        if parts == ['auth', 'status'] and method == 'GET':
+            user = self.current_user()
+            return self._json({
+                'needsSetup': not users,
+                'user': self.public_user(user) if user else None,
+            })
+
+        if parts == ['auth', 'register'] and method == 'POST':
+            body = self._body() or {}
+            # el primero se crea solo; a partir de ahí, sólo el dueño invita
+            if users:
+                current = self.current_user()
+                if not current or current.get('role') != 'dueño':
+                    return self._error(403, 'Sólo el dueño puede crear más cuentas.')
+                user = storage.create_user(body.get('name'), body.get('login'),
+                                           body.get('password'), body.get('role') or 'ayudante')
+                return self._json(self.public_user(user), 201)
+
+            user = storage.create_user(body.get('name'), body.get('login'),
+                                       body.get('password'), 'dueño')
+            self._set_session_cookie(storage.open_session(user['id']))
+            return self._json(self.public_user(user), 201)
+
+        if parts == ['auth', 'login'] and method == 'POST':
+            if too_many_tries(self.client_address[0]):
+                return self._error(429, 'Demasiados intentos. Espera un par de minutos.')
+            body = self._body() or {}
+            user = storage.find_user(body.get('login'))
+            if not user or not check_password(body.get('password'), user):
+                note_failed_try(self.client_address[0])
+                return self._error(401, 'Usuario o contraseña que no cuadran.')
+            clear_tries(self.client_address[0])
+            self._set_session_cookie(storage.open_session(user['id']))
+            return self._json(self.public_user(user))
+
+        if parts == ['auth', 'logout'] and method == 'POST':
+            storage.close_session(self._cookie_token())
+            self._extra_headers['Set-Cookie'] = (
+                '%s=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0' % COOKIE_NAME)
+            return self._json({'ok': True})
+
+        if parts == ['auth', 'users']:
+            current = self.current_user()
+            if not current:
+                return self._error(401, 'Entra con tu cuenta.')
+            if method == 'GET':
+                return self._json([self.public_user(u) for u in users])
+            return self._error(405, 'Método no permitido')
+
+        if len(parts) == 3 and parts[:2] == ['auth', 'users'] and method == 'DELETE':
+            current = self.current_user()
+            if not current or current.get('role') != 'dueño':
+                return self._error(403, 'Sólo el dueño puede borrar cuentas.')
+            if parts[2] == current['id']:
+                return self._error(400, 'No puedes borrar tu propia cuenta.')
+            ok = storage.delete_user(safe_id(parts[2]))
+            return self._json({'ok': True}) if ok else self._error(404, 'No existe esa cuenta.')
+
+        return None
+
     def _api(self, method, path):
         parts = [p for p in path.split('/') if p][1:]   # quita 'api'
 
         if parts == ['ping']:
-            return self._json({'ok': True, 'app': 'taller', 'version': 2})
+            return self._json({'ok': True, 'app': 'taller', 'version': 3})
+
+        if parts and parts[0] == 'auth':
+            handled = self._auth(method, parts)
+            if handled is None:
+                return self._error(404, 'Ruta desconocida')
+            return handled
+
+        # Del resto no se ve nada sin haber entrado
+        if self.storage.users() and not self.current_user():
+            return self._error(401, 'Entra con tu cuenta.')
 
         if parts == ['profiles']:
             if method == 'GET':
@@ -395,6 +606,50 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         if os.environ.get('TALLER_VERBOSE'):
             sys.stderr.write('%s - %s\n' % (self.address_string(), fmt % args))
+
+
+# ───────────────────────── contraseñas ─────────────────────────
+
+def hash_password(password):
+    """La contraseña nunca se guarda: sólo su huella, con sal y muchas vueltas."""
+    salt = secrets.token_bytes(16)
+    digest = hashlib.pbkdf2_hmac('sha256', (password or '').encode('utf-8'), salt, PBKDF2_ROUNDS)
+    return {
+        'salt': base64.b64encode(salt).decode(),
+        'hash': base64.b64encode(digest).decode(),
+        'rounds': PBKDF2_ROUNDS,
+    }
+
+
+def check_password(password, user):
+    try:
+        salt = base64.b64decode(user.get('salt', ''))
+        expected = base64.b64decode(user.get('hash', ''))
+        rounds = int(user.get('rounds') or PBKDF2_ROUNDS)
+    except Exception:                                  # noqa: BLE001
+        return False
+    digest = hashlib.pbkdf2_hmac('sha256', (password or '').encode('utf-8'), salt, rounds)
+    return hmac.compare_digest(digest, expected)       # comparación sin pistas por tiempo
+
+
+# Freno sencillo a quien prueba contraseñas a lo loco
+_tries = {}
+MAX_TRIES = 10
+TRIES_WINDOW = 300
+
+
+def too_many_tries(ip):
+    fails = [t for t in _tries.get(ip, []) if time.time() - t < TRIES_WINDOW]
+    _tries[ip] = fails
+    return len(fails) >= MAX_TRIES
+
+
+def note_failed_try(ip):
+    _tries.setdefault(ip, []).append(time.time())
+
+
+def clear_tries(ip):
+    _tries.pop(ip, None)
 
 
 # ───────────────────────── ayudas del proxy ─────────────────────────

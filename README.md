@@ -51,8 +51,60 @@ Desinstalar borra el programa pero **no** tus fichas (siguen en `/var/lib/taller
   los datos se quedan en ese navegador.
 - **A mano**: `python3 server.py --port 8477`. Sólo necesita Python 3, sin librerías.
 
-> ⚠️ No lleva contraseña: cualquiera de tu red que abra esa dirección ve y toca las fichas.
-> Está pensado para tu red de casa o del taller, no para dejarlo abierto a internet.
+## Tu cuenta
+
+La primera vez que lo abres sale una pantalla de bienvenida para **crear tu cuenta**: un
+usuario y una contraseña. A partir de ahí, quien entre en la dirección tiene que
+identificarse; sin eso no se ve ni una ficha.
+
+- La contraseña **no se guarda**: se guarda su huella (PBKDF2-SHA256, con sal y 210.000
+  vueltas), en `users.json` con permisos sólo para el servicio.
+- La sesión dura 30 días en ese dispositivo. Hay botón de salir en **Datos → Tu cuenta**.
+- Tras diez intentos fallidos seguidos, ese dispositivo espera unos minutos.
+- Desde **Datos → Tu cuenta** puedes darle acceso a otra persona (un ayudante). El dueño
+  es quien crea y quita cuentas.
+- ¿Se te olvidó la contraseña? Borra `/var/lib/taller/users.json` y al abrir volverá a
+  salir la pantalla de «Hola» para crear cuenta otra vez. Las fichas no se tocan.
+
+Las **cuentas** son para entrar. Los **perfiles** son cajones de fichas: quien entra los ve
+todos. No son cosas distintas por descuido, es a propósito: un taller pequeño con dos manos.
+
+> ⚠️ La conexión va por http, sin cifrar: dentro de tu red de casa o del taller está bien,
+> pero no dejes esa dirección abierta a internet.
+
+## En el móvil
+
+La web ya se adapta al móvil, pero además se puede **añadir a la pantalla de inicio** y
+queda con su icono, sin barra del navegador:
+
+- **Android (Chrome)**: menú ⋮ → *Añadir a pantalla de inicio*.
+- **iPhone (Safari)**: compartir → *Añadir a pantalla de inicio*.
+
+Trae `manifest.webmanifest`, iconos propios y un *service worker* que guarda la interfaz,
+para que abra rápido y no se quede en blanco si el servidor tarda. Si el servidor no
+responde, en vez de enseñarte un taller vacío te avisa de que estás sin conexión (así no
+apuntas nada que luego no aparecería en el ordenador).
+
+Un detalle técnico: el navegador sólo activa el *service worker* en sitios seguros (https o
+localhost). Por http en tu red se lo salta sin quejarse y la aplicación funciona igual, sólo
+que sin el arranque instantáneo. Para eso está la aplicación de Android, que va por debajo.
+
+## La aplicación de Android (APK)
+
+En `android/` está el proyecto: una aplicación que abre tu servidor a pantalla completa, con
+su icono, guardando la sesión y con botón de atrás. La primera vez pide la dirección
+(`http://192.168.x.x:8477`) y ya no la vuelve a pedir.
+
+**El APK lo compila GitHub, no hace falta que instales nada**:
+
+1. Entra en la pestaña **Actions** del repositorio.
+2. Elige **Construir el APK** → **Run workflow**.
+3. Cuando acabe (un par de minutos), en esa misma página, abajo del todo, hay un
+   **Artifact** llamado `taller-apk`. Descárgalo y descomprime.
+4. Pásalo al móvil e instálalo dando permiso a «orígenes desconocidos».
+
+Va firmado con la clave de depuración: sirve para instalarlo en tus móviles, no para
+publicarlo en Google Play.
 
 ## Qué hace
 
@@ -165,6 +217,9 @@ Sin dependencias, sin compilar nada, sin base de datos. Python 3 de serie y Java
 install.sh     instalador (systemd + usuario propio + servicio + atajo de actualizar)
 server.py      servidor, API y proxy de tiendas; guarda un JSON por perfil
 index.html
+manifest.webmanifest  para añadirla a la pantalla de inicio del móvil
+sw.js                 arranque rápido y aviso de sin conexión
+android/              proyecto de la aplicación de Android (lo compila GitHub)
 assets/
   styles.css   estilos y tema claro/oscuro
   store.js     datos, cálculos, perfiles y guardado (servidor o navegador)
@@ -185,4 +240,10 @@ GET    /api/profiles/<id>/tickets
 PUT    /api/profiles/<id>/tickets [ …fichas… ]
 GET    /api/settings              PUT /api/settings            {shops:[…]}
 GET    /api/proxy?url=…          (sólo dominios de tus tiendas)
+
+GET    /api/auth/status           ¿hay que crear cuenta o entrar?
+POST   /api/auth/register         {name, login, password}
+POST   /api/auth/login            {login, password}     → cookie de sesión
+POST   /api/auth/logout
+GET    /api/auth/users            DELETE /api/auth/users/<id>
 ```

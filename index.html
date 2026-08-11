@@ -5,10 +5,77 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0f1216">
 <title>Taller · Control de reparaciones y ventas</title>
+<meta name="description" content="Fichas de reparación de móviles: piezas, costes y beneficio de cada venta.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔧</text></svg>">
+<link rel="icon" type="image/png" sizes="192x192" href="assets/icons/icon-192.png">
+<link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Taller">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="stylesheet" href="assets/styles.css">
 </head>
-<body>
+<body class="is-booting">
+
+<!-- ─────────────── BIENVENIDA / ENTRAR ─────────────── -->
+<div id="welcome" class="welcome" hidden>
+  <div class="welcome-card">
+    <div class="welcome-mark">🔧</div>
+
+    <div id="welcome-setup" hidden>
+      <h1>Hola</h1>
+      <p class="welcome-lead">
+        Esto es tu taller: las fichas de cada móvil, lo que te cuesta cada pieza y lo que
+        ganas con cada venta.<br>
+        Crea tu cuenta y empezamos.
+      </p>
+    </div>
+
+    <div id="welcome-login" hidden>
+      <h1>Hola otra vez</h1>
+      <p class="welcome-lead">Entra para ver tus fichas.</p>
+    </div>
+
+    <form id="welcome-form" autocomplete="on">
+      <label class="welcome-field" id="field-name" hidden>Tu nombre
+        <input name="name" autocomplete="name" placeholder="Marci" maxlength="60">
+      </label>
+      <label class="welcome-field">Usuario
+        <input name="login" autocomplete="username" placeholder="marci" required
+               autocapitalize="none" spellcheck="false">
+      </label>
+      <label class="welcome-field">Contraseña
+        <input name="password" type="password" autocomplete="current-password"
+               placeholder="mínimo 6 caracteres" required>
+      </label>
+      <label class="welcome-field" id="field-password2" hidden>Repite la contraseña
+        <input name="password2" type="password" autocomplete="new-password">
+      </label>
+
+      <p class="welcome-error" id="welcome-error" hidden></p>
+
+      <button class="btn btn-primary welcome-submit" type="submit" id="welcome-submit">Entrar</button>
+    </form>
+
+    <p class="welcome-note" id="welcome-note"></p>
+  </div>
+</div>
+
+<!-- ─────────────── SIN CONEXIÓN ─────────────── -->
+<div id="offline" class="welcome" hidden>
+  <div class="welcome-card">
+    <div class="welcome-mark">📡</div>
+    <h1>Sin conexión</h1>
+    <p class="welcome-lead">
+      No se llega al servidor del taller, así que aquí no están tus fichas.<br>
+      Comprueba que el equipo esté encendido y que estés en el mismo wifi.
+    </p>
+    <button class="btn btn-primary welcome-submit" id="offline-retry">Reintentar</button>
+    <p class="welcome-note">No se puede apuntar nada mientras tanto: se guardaría sólo en este
+      móvil y no lo verías luego desde el ordenador.</p>
+  </div>
+</div>
 
 <header class="topbar">
   <div class="brand">
@@ -106,6 +173,19 @@
         <small id="storage-mode"></small>
       </header>
       <p class="hint" id="storage-detail"></p>
+    </article>
+
+    <article class="card" id="account-card" hidden>
+      <header class="card-head">
+        <h2>Tu cuenta</h2>
+        <small id="account-who"></small>
+      </header>
+      <p class="hint">Las cuentas son para entrar; los perfiles de abajo son cajones de fichas. Quien entra ve todos los perfiles.</p>
+      <ul id="account-list" class="mini-list"></ul>
+      <div class="row-btns" style="margin-top:12px">
+        <button class="btn" id="account-new">+ Dar acceso a alguien</button>
+        <button class="btn" id="account-logout">Salir de la cuenta</button>
+      </div>
     </article>
 
     <article class="card">
