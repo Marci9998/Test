@@ -66,6 +66,7 @@ class Storage:
         self.dir = data_dir
         self.profiles_path = os.path.join(self.dir, 'profiles.json')
         os.makedirs(os.path.join(self.dir, 'profiles'), exist_ok=True)
+        os.makedirs(os.path.join(self.dir, 'quotes'), exist_ok=True)
         os.makedirs(os.path.join(self.dir, 'backups'), exist_ok=True)
         if not os.path.exists(self.profiles_path):
             self._write_json(self.profiles_path, [])
@@ -170,6 +171,34 @@ class Storage:
                 os.remove(os.path.join(self.dir, 'backups', old))
             except OSError:
                 pass
+
+    # — presupuestos —
+
+    def _quote_path(self, profile_id):
+        return os.path.join(self.dir, 'quotes', profile_id + '.json')
+
+    def quotes(self, profile_id):
+        data = self._read_json(self._quote_path(profile_id), [])
+        return data if isinstance(data, list) else []
+
+    def save_quotes(self, profile_id, quotes):
+        path = self._quote_path(profile_id)
+        if os.path.exists(path):
+            stamp = time.strftime('%Y%m%d')
+            target = os.path.join(self.dir, 'backups',
+                                  'presupuestos-%s-%s.json' % (profile_id, stamp))
+            if not os.path.exists(target):
+                try:
+                    shutil.copy2(path, target)
+                except OSError:
+                    pass
+        self._write_json(path, quotes)
+
+    def quote(self, profile_id, quote_id):
+        for item in self.quotes(profile_id):
+            if item.get('id') == quote_id:
+                return item
+        return None
 
     # — cuentas y sesiones —
 
@@ -500,6 +529,44 @@ class Handler(BaseHTTPRequestHandler):
                 self.storage.save_tickets(profile_id, tickets)
                 return self._json({'ok': True, 'count': len(tickets)})
             return self._error(405, 'Método no permitido')
+
+        if len(parts) == 3 and parts[0] == 'profiles' and parts[2] == 'quotes':
+            profile_id = safe_id(parts[1])
+            if not any(p['id'] == profile_id for p in self.storage.profiles()):
+                return self._error(404, 'No existe ese perfil')
+            if method == 'GET':
+                return self._json(self.storage.quotes(profile_id))
+            if method == 'PUT':
+                quotes = self._body()
+                if not isinstance(quotes, list):
+                    raise ValueError('Se esperaba una lista de presupuestos')
+                self.storage.save_quotes(profile_id, quotes)
+                return self._json({'ok': True, 'count': len(quotes)})
+            return self._error(405, 'Método no permitido')
+
+        if len(parts) == 5 and parts[0] == 'profiles' and parts[2] == 'quotes' \
+                and parts[4] == 'pdf' and method == 'GET':
+            profile_id = safe_id(parts[1])
+            quote = self.storage.quote(profile_id, safe_id(parts[3]))
+            if not quote:
+                return self._error(404, 'No existe ese presupuesto')
+
+            profile_name = ''
+            for p in self.storage.profiles():
+                if p['id'] == profile_id:
+                    profile_name = p.get('name', '')
+
+            try:
+                import quotepdf
+                data = quotepdf.build(quote, (self.storage.settings() or {}).get('business'),
+                                      profile_name)
+            except Exception as err:                   # noqa: BLE001
+                sys.stderr.write('Error montando el PDF: %r\n' % (err,))
+                return self._error(500, 'No se pudo montar el PDF')
+
+            name = 'presupuesto-%s.pdf' % (quote.get('number') or quote.get('id'))
+            return self._send(200, data, 'application/pdf',
+                              {'Content-Disposition': 'attachment; filename="%s"' % name})
 
         if parts == ['settings']:
             if method == 'GET':

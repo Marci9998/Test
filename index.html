@@ -111,6 +111,7 @@
 <nav class="tabs" role="tablist">
   <button class="tab is-active" role="tab" data-view="panel">Panel</button>
   <button class="tab" role="tab" data-view="fichas">Fichas</button>
+  <button class="tab" role="tab" data-view="presupuestos">Presupuestos</button>
   <button class="tab" role="tab" data-view="datos">Datos</button>
 </nav>
 
@@ -165,6 +166,20 @@
     <p id="empty" class="empty" hidden></p>
   </section>
 
+  <!-- ─────────────── PRESUPUESTOS ─────────────── -->
+  <section id="view-presupuestos" class="view">
+    <div class="filters">
+      <p class="hint" style="flex:1;margin:0">
+        Presupuestos para dar al cliente. Se pueden sacar de una ficha con el botón
+        <b>Presupuesto</b> que hay dentro de cada una.
+      </p>
+      <button class="btn btn-primary" id="quote-new">+ Nuevo presupuesto</button>
+    </div>
+
+    <div id="quote-list" class="list"></div>
+    <p id="quote-empty" class="empty" hidden></p>
+  </section>
+
   <!-- ─────────────── DATOS ─────────────── -->
   <section id="view-datos" class="view">
     <article class="card" id="storage-card">
@@ -198,6 +213,41 @@
       <div class="row-btns" style="margin-top:12px">
         <button class="btn" id="profile-new">+ Nuevo perfil</button>
       </div>
+    </article>
+
+    <article class="card">
+      <header class="card-head">
+        <h2>Datos del taller</h2>
+        <small>lo que sale en los presupuestos</small>
+      </header>
+      <p class="hint">Esto es la cabecera del PDF: lo que ve el cliente. Se guarda una vez y
+        vale para todos los presupuestos.</p>
+      <form id="business-form" class="grid-2">
+        <label>Nombre del taller
+          <input name="name" placeholder="Taller de Marci">
+        </label>
+        <label>NIF / CIF
+          <input name="taxId" placeholder="00000000X">
+        </label>
+        <label class="col-2">Debajo del nombre
+          <input name="tagline" placeholder="Reparación y venta de teléfonos">
+        </label>
+        <label>Teléfono
+          <input name="phone" placeholder="600 123 456">
+        </label>
+        <label>Correo
+          <input name="email" placeholder="marci@taller.es">
+        </label>
+        <label class="col-2">Dirección
+          <input name="address" placeholder="Avda. del Puerto 33 · 46023 Valencia">
+        </label>
+        <label class="col-2">Condiciones (salen al final del presupuesto)
+          <textarea name="terms" rows="3" placeholder="Presupuesto sin compromiso. La reparación no empieza hasta que lo apruebes…"></textarea>
+        </label>
+        <label class="col-2">Despedida
+          <input name="footer" placeholder="Gracias por confiar en el taller.">
+        </label>
+      </form>
     </article>
 
     <article class="card">
@@ -373,6 +423,7 @@
 
   <footer class="drawer-foot">
     <button class="btn btn-danger-ghost" id="delete-ticket" type="button" hidden>Borrar</button>
+    <button class="btn" id="ticket-quote" type="button" title="Sacar un presupuesto de esta ficha">Presupuesto</button>
     <span class="spacer"></span>
     <button class="btn" id="cancel-ticket" type="button">Cancelar</button>
     <button class="btn btn-primary" id="save-ticket" type="button">Guardar</button>
@@ -399,6 +450,109 @@
     </footer>
   </div>
 </div>
+
+<!-- ─────────────── PRESUPUESTO (panel lateral) ─────────────── -->
+<div id="quote-backdrop" class="backdrop" hidden></div>
+<aside id="quote-drawer" class="drawer" hidden aria-label="Presupuesto">
+  <header class="drawer-head">
+    <h2 id="quote-title">Nuevo presupuesto</h2>
+    <button class="icon-btn" id="quote-close" aria-label="Cerrar">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.4 5 5 6.4 10.6 12 5 17.6 6.4 19 12 13.4 17.6 19 19 17.6 13.4 12 19 6.4 17.6 5 12 10.6 6.4 5Z"/></svg>
+    </button>
+  </header>
+
+  <form id="quote-form" class="drawer-body">
+    <fieldset>
+      <legend>El papel</legend>
+      <div class="grid-2">
+        <label>Número
+          <input name="number" placeholder="2026-001">
+        </label>
+        <label>Estado
+          <select id="quote-status"></select>
+        </label>
+        <label>Fecha
+          <input name="createdAt" type="date">
+        </label>
+        <label>Válido hasta
+          <input name="validUntil" type="date">
+        </label>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Cliente</legend>
+      <div class="grid-2">
+        <label>Nombre
+          <input name="customerName" placeholder="Laura Giménez">
+        </label>
+        <label>Teléfono
+          <input name="customerPhone" inputmode="tel" placeholder="600 000 000">
+        </label>
+        <label>Correo
+          <input name="customerEmail" type="email" placeholder="opcional">
+        </label>
+        <label>NIF
+          <input name="customerTaxId" placeholder="opcional">
+        </label>
+        <label class="col-2">Dirección
+          <input name="customerAddress" placeholder="opcional">
+        </label>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Equipo</legend>
+      <div class="grid-2">
+        <label>Marca
+          <input name="brand" list="dl-brands" placeholder="Apple">
+        </label>
+        <label>Modelo
+          <input name="model" list="dl-models" placeholder="iPhone 11">
+        </label>
+        <label>Almacenamiento
+          <input name="storage" placeholder="64 GB">
+        </label>
+        <label>IMEI
+          <input name="imei" inputmode="numeric" placeholder="opcional">
+        </label>
+        <label class="col-2">Avería
+          <textarea name="issue" rows="2" placeholder="Pantalla rota y no carga"></textarea>
+        </label>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Qué se le cobra</legend>
+      <div id="quote-lines" class="qlines"></div>
+      <button type="button" class="btn btn-ghost" id="quote-add-line">+ Añadir línea</button>
+
+      <div class="grid-2" style="margin-top:14px">
+        <label>Descuento (€)
+          <input name="discount" type="text" inputmode="decimal" placeholder="0">
+        </label>
+        <label>IVA (%)
+          <input name="vatRate" type="text" inputmode="decimal" placeholder="21">
+        </label>
+      </div>
+
+      <div class="summary" id="quote-totals"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Notas para el cliente</legend>
+      <textarea name="notes" rows="3" placeholder="Se entrega el mismo día si la pieza está en stock…"></textarea>
+    </fieldset>
+  </form>
+
+  <footer class="drawer-foot">
+    <button class="btn btn-danger-ghost" id="quote-delete" type="button" hidden>Borrar</button>
+    <span class="spacer"></span>
+    <button class="btn" id="quote-cancel" type="button">Cancelar</button>
+    <button class="btn" id="quote-pdf" type="button">PDF</button>
+    <button class="btn btn-primary" id="quote-save" type="button">Guardar</button>
+  </footer>
+</aside>
 
 <!-- ─────────────── MINI NAVEGADOR DE REPUESTOS ─────────────── -->
 <section id="shop" class="shop" hidden aria-label="Buscador de repuestos">
@@ -475,6 +629,7 @@
 <script src="assets/csv.js"></script>
 <script src="assets/shop.js"></script>
 <script src="assets/ui.js"></script>
+<script src="assets/quotes.js"></script>
 <script src="assets/app.js"></script>
 </body>
 </html>

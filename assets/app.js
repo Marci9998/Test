@@ -4,7 +4,8 @@
 (function (global) {
   'use strict';
 
-  var S = global.Store, C = global.CSV, U = global.UI, Shop = global.Shop;
+  var S = global.Store, C = global.CSV, U = global.UI, Shop = global.Shop,
+      Quotes = global.Quotes;
   var el = U.el;
 
   var filter = { status: 'todos', query: '', sort: 'updated' };
@@ -36,6 +37,7 @@
     U.renderSuggestions();
     U.renderProfiles();
     U.renderStorageInfo();      // los textos nombran al perfil abierto
+    Quotes.render();
   }
 
   /* Texto que se manda al buscador de repuestos: modelo + pieza */
@@ -47,7 +49,7 @@
 
   /* ── Navegación por pestañas ─────────────────────────────── */
   function showView(name) {
-    ['panel', 'fichas', 'datos'].forEach(function (v) {
+    ['panel', 'fichas', 'presupuestos', 'datos'].forEach(function (v) {
       el('view-' + v).classList.toggle('is-active', v === name);
     });
     Array.prototype.forEach.call(document.querySelectorAll('.tab'), function (tab) {
@@ -433,6 +435,18 @@
     });
 
     /* Buscador de repuestos */
+    el('ticket-quote').addEventListener('click', function () {
+      var ticket = syncFromForm();
+      if (!ticket.model.trim() && !ticket.brand.trim()) {
+        return U.toast('Ponle antes la marca o el modelo');
+      }
+      S.upsert(ticket);            // que no se pierda lo escrito
+      closeDrawer(true);
+      refresh();
+      showView('presupuestos');
+      Quotes.open(Quotes.fromTicket(ticket));
+    });
+
     el('shop-toggle').addEventListener('click', function () {
       if (Shop.isOpen()) return Shop.close();
       Shop.open(current ? { query: searchTerms('') } : {});
@@ -490,6 +504,18 @@
     el('profile-name').addEventListener('keydown', function (e) {
       if (e.key === 'Enter') { e.preventDefault(); saveProfile(); }
     });
+
+    /* Datos del taller */
+    var businessForm = el('business-form');
+    function saveBusiness() {
+      var data = {};
+      Array.prototype.forEach.call(businessForm.querySelectorAll('[name]'), function (input) {
+        data[input.name] = input.value.trim();
+      });
+      S.saveBusiness(data);
+    }
+    businessForm.addEventListener('change', saveBusiness);
+    businessForm.addEventListener('submit', function (e) { e.preventDefault(); });
 
     /* Tiendas de repuestos */
     el('shop-settings').addEventListener('input', saveShopSettings);
@@ -549,6 +575,7 @@
       if (e.key === 'Escape') {
         if (!el('csv-modal').hidden) el('csv-modal').hidden = true;
         else if (!el('profile-modal').hidden) closeProfileModal();
+        else if (Quotes.isOpen()) Quotes.close(false);
         else if (!el('drawer').hidden) closeDrawer(false);
         else if (Shop.isOpen()) Shop.close();
       }
@@ -690,11 +717,16 @@
 
   function startApp() {
     revealApp();
-    if (!wired) { wire(); Shop.init(); wired = true; }
+    if (!wired) { wire(); Shop.init(); Quotes.init({ onChange: refresh }); wired = true; }
     refresh();
     U.renderShopSettings();
     U.renderStorageInfo();
     renderAccount();
+
+    var business = S.business();
+    Array.prototype.forEach.call(el('business-form').querySelectorAll('[name]'), function (input) {
+      input.value = business[input.name] || '';
+    });
 
     var view = S.prefs().view;
     showView(['panel', 'fichas', 'datos'].indexOf(view) > -1 ? view : 'panel');
@@ -721,6 +753,7 @@
         // sin haber entrado no se enseña nada de dentro
         wire();
         Shop.init();
+        Quotes.init({ onChange: refresh });
         wired = true;
         showWelcome(auth.needsSetup ? 'setup' : 'login');
         return;

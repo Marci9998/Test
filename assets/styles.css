@@ -524,6 +524,43 @@ input:focus, select:focus, textarea:focus, .search input:focus {
 }
 .parts-head span:nth-child(2), .parts-head span:nth-child(3) { text-align: right; }
 
+/* Líneas del presupuesto */
+.qlines { display: grid; gap: 10px; margin-bottom: 10px; }
+.qline {
+  display: grid;
+  grid-template-columns: 1fr 58px 78px 84px 32px;
+  gap: 6px;
+  align-items: center;
+}
+.qline input { margin-top: 0; }
+.qline-qty, .qline-price { text-align: right; font-variant-numeric: tabular-nums; }
+.qline-amount {
+  font-size: 13px;
+  font-weight: 620;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.qline-note {
+  grid-column: 1 / -1;
+  font-size: 12.5px !important;
+  padding: 6px 10px !important;
+  color: var(--text-dim);
+}
+.qline-head {
+  display: grid;
+  grid-template-columns: 1fr 58px 78px 84px 32px;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-faint);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.qline-head span:nth-child(n+2) { text-align: right; }
+
+#quote-list .money-profit { color: var(--text); }
+
 /* Resumen de números */
 .summary {
   margin-top: 14px;
@@ -841,6 +878,8 @@ a.btn:not([href]) { opacity: .5; pointer-events: none; }
   .drawer { width: 100%; border-left: 0; }
   .part { grid-template-columns: 1fr 46px 68px 30px 30px; }
   .parts-head { grid-template-columns: 1fr 46px 68px 30px 30px; }
+  .qline, .qline-head { grid-template-columns: 1fr 44px 62px 70px 28px; }
+  .qline-amount { font-size: 12px; }
   .csv-map label { grid-template-columns: 1fr; gap: 4px; }
   .kpi-value { font-size: 21px; }
   .profile-picker select { max-width: 116px; }

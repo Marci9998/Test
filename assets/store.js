@@ -404,6 +404,68 @@
 
   function wipe() { tickets = []; save(); }
 
+  /* ── Presupuestos ────────────────────────────────────────── */
+  var quotes = [];
+  var QUOTES_KEY = 'taller.quotes.v1.';       // + id de perfil
+
+  function loadQuotes() {
+    if (!remote) {
+      quotes = lsGet(QUOTES_KEY + activeId, []) || [];
+      return Promise.resolve(quotes);
+    }
+    return api('/profiles/' + activeId + '/quotes').then(function (list) {
+      quotes = Array.isArray(list) ? list : [];
+      return quotes;
+    }).catch(function () { quotes = []; return quotes; });
+  }
+
+  function saveQuotesList() {
+    if (!remote) {
+      lsSet(QUOTES_KEY + activeId, quotes);
+      return Promise.resolve();
+    }
+    return api('/profiles/' + activeId + '/quotes', { method: 'PUT', body: quotes })
+      .catch(function (err) {
+        onError('No se pudo guardar el presupuesto: ' + err.message);
+      });
+  }
+
+  function allQuotes() { return quotes; }
+
+  function quote(id) {
+    for (var i = 0; i < quotes.length; i++) if (quotes[i].id === id) return quotes[i];
+    return null;
+  }
+
+  function saveQuote(q) {
+    q.updatedAt = new Date().toISOString();
+    var idx = -1;
+    for (var i = 0; i < quotes.length; i++) if (quotes[i].id === q.id) { idx = i; break; }
+    if (idx >= 0) quotes[idx] = q; else quotes.unshift(q);
+    saveQuotesList();
+    return q;
+  }
+
+  function removeQuote(id) {
+    quotes = quotes.filter(function (q) { return q.id !== id; });
+    saveQuotesList();
+  }
+
+  function quotePdfUrl(id) {
+    return '/api/profiles/' + activeId + '/quotes/' + id + '/pdf';
+  }
+
+  /* ── Datos del taller (los que salen en el PDF) ──────────── */
+  function business() { return settings.business || {}; }
+
+  function saveBusiness(data) {
+    settings.business = data;
+    if (!remote) { lsSet(SETTINGS_KEY, settings); return Promise.resolve(); }
+    return api('/settings', { method: 'PUT', body: settings }).catch(function (err) {
+      onError('No se pudieron guardar los datos del taller: ' + err.message);
+    });
+  }
+
   /* ── Preferencias del dispositivo (tema, pestaña, perfil) ── */
   function prefs(patch) {
     var current = lsGet(PREFS_KEY, {}) || {};
@@ -541,7 +603,7 @@
       var saved = prefs().profile;
       activeId = profiles.some(function (p) { return p.id === saved; }) ? saved : profiles[0].id;
       prefs({ profile: activeId });
-      return Promise.all([loadTickets(), loadSettings()]);
+      return Promise.all([loadTickets(), loadQuotes(), loadSettings()]);
     });
   }
 
@@ -596,6 +658,14 @@
     shops: shops,
     saveShops: saveShops,
     proxyUrl: proxyUrl,
+
+    quotes: allQuotes,
+    quote: quote,
+    saveQuote: saveQuote,
+    removeQuote: removeQuote,
+    quotePdfUrl: quotePdfUrl,
+    business: business,
+    saveBusiness: saveBusiness,
 
     prefs: prefs,
     stats: stats,

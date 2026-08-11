@@ -170,6 +170,26 @@ Las direcciones de las tiendas se editan en **Datos → Tiendas de repuestos**. 
 lo que se busca. Si una tienda cambia su buscador o quieres añadir otra (AliExpress, tu
 proveedor de siempre…), se cambia ahí sin tocar código.
 
+### Presupuestos y PDF
+
+Pestaña **Presupuestos**: papeles para dar al cliente, con su numeración por año
+(`2026-001`, `2026-002`…), fecha de validez, líneas de lo que se le cobra, descuento e IVA.
+El total se calcula solo mientras escribes.
+
+Lo más cómodo es sacarlos de una ficha: al abrir un móvil hay un botón **Presupuesto** que
+crea uno ya relleno — el equipo, la avería, el cliente y las piezas apuntadas, más una
+línea de mano de obra para que le pongas precio.
+
+El botón **PDF** genera un documento A4 con la cabecera de tu taller, los datos del cliente,
+el equipo, la tabla del trabajo, los totales y un hueco para la firma. Lo monta el servidor
+(`pdfgen.py` + `quotepdf.py`, escritos a mano, sin librerías), así que se descarga como un
+PDF de verdad — nada de imprimir desde el navegador.
+
+Rellena una vez **Datos → Datos del taller** (nombre, NIF, teléfono, dirección, condiciones)
+y sale en todos los presupuestos. Los estados son Borrador · Enviado · Aceptado · Rechazado.
+
+> El PDF necesita el servidor. Si abres la web como fichero suelto, el botón te lo dice.
+
 ### Perfiles
 
 Cada perfil tiene sus propias fichas y sus propios números: útil para separar el taller de
@@ -216,6 +236,8 @@ Sin dependencias, sin compilar nada, sin base de datos. Python 3 de serie y Java
 ```
 install.sh     instalador (systemd + usuario propio + servicio + atajo de actualizar)
 server.py      servidor, API y proxy de tiendas; guarda un JSON por perfil
+pdfgen.py      escribe PDF (texto, líneas y recuadros) sin librerías
+quotepdf.py    el diseño del presupuesto, separado de las tripas del PDF
 index.html
 manifest.webmanifest  para añadirla a la pantalla de inicio del móvil
 sw.js                 arranque rápido y aviso de sin conexión
@@ -225,6 +247,7 @@ assets/
   store.js     datos, cálculos, perfiles y guardado (servidor o navegador)
   csv.js       importar y exportar CSV / copias JSON
   shop.js      panel buscador de repuestos
+  quotes.js    presupuestos: lista, editor y PDF
   ui.js        pintado del panel, la lista y la ficha
   app.js       arranque y eventos
 ```
@@ -238,7 +261,9 @@ PATCH  /api/profiles/<id>         {name}
 DELETE /api/profiles/<id>
 GET    /api/profiles/<id>/tickets
 PUT    /api/profiles/<id>/tickets [ …fichas… ]
-GET    /api/settings              PUT /api/settings            {shops:[…]}
+GET    /api/settings              PUT /api/settings            {shops:[…], business:{…}}
+GET    /api/profiles/<id>/quotes  PUT /api/profiles/<id>/quotes [ …presupuestos… ]
+GET    /api/profiles/<id>/quotes/<qid>/pdf
 GET    /api/proxy?url=…          (sólo dominios de tus tiendas)
 
 GET    /api/auth/status           ¿hay que crear cuenta o entrar?
