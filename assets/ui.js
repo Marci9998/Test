@@ -317,16 +317,16 @@
         '(mira el README) o descarga copias desde aquí abajo.';
 
     var profile = S.activeProfile();
-    var name = profile ? '«' + profile.name + '»' : 'este perfil';
+    var name = profile ? '«' + profile.name + '»' : 'este puesto';
 
     el('backup-hint').textContent = remote
-      ? 'Descarga las fichas de ' + name + ' en un fichero, para guardarlas aparte del servidor ' +
-        'o llevártelas a otro sitio.'
+      ? 'Descarga las fichas del puesto ' + name + ' en un fichero, para guardarlas aparte del ' +
+        'servidor o llevártelas a otro sitio.'
       : 'Descarga una copia de vez en cuando. Si cambias de móvil u ordenador, importa el fichero ' +
         'y lo tienes todo igual.';
 
-    el('wipe-hint').textContent = 'Borra todas las fichas del perfil ' + name +
-      '. Los demás perfiles no se tocan. Descarga una copia antes.';
+    el('wipe-hint').textContent = 'Borra todas las fichas del puesto ' + name +
+      '. Los demás puestos no se tocan. Descarga una copia antes.';
   }
 
   /* ── Select de estados ───────────────────────────────────── */
