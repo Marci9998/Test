@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1216">
+<title>Taller · Control de reparaciones y ventas</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔧</text></svg>">
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">🔧</span>
+    <div class="brand-text">
+      <strong>Taller</strong>
+      <small>Reparaciones y ventas</small>
+    </div>
+  </div>
+
+  <div class="search">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4a6 6 0 1 0 3.9 10.6l4.3 4.2 1.4-1.4-4.2-4.3A6 6 0 0 0 10 4Zm0 2a4 4 0 1 1 0 8 4 4 0 0 1 0-8Z"/></svg>
+    <input id="search" type="search" placeholder="Buscar modelo, cliente, IMEI, nota…" autocomplete="off">
+  </div>
+
+  <div class="topbar-actions">
+    <button id="theme-toggle" class="icon-btn" title="Cambiar tema" aria-label="Cambiar tema">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9Z"/></svg>
+    </button>
+    <button id="new-ticket" class="btn btn-primary">
+      <span aria-hidden="true">+</span> Nueva ficha
+    </button>
+  </div>
+</header>
+
+<nav class="tabs" role="tablist">
+  <button class="tab is-active" role="tab" data-view="panel">Panel</button>
+  <button class="tab" role="tab" data-view="fichas">Fichas</button>
+  <button class="tab" role="tab" data-view="datos">Datos</button>
+</nav>
+
+<main>
+  <!-- ─────────────── PANEL ─────────────── -->
+  <section id="view-panel" class="view is-active">
+    <div class="kpis" id="kpis"></div>
+
+    <div class="panel-grid">
+      <article class="card">
+        <header class="card-head">
+          <h2>Beneficio por mes</h2>
+          <small>últimos 6 meses · sólo vendidos</small>
+        </header>
+        <div id="chart" class="chart"></div>
+      </article>
+
+      <article class="card">
+        <header class="card-head">
+          <h2>Necesitan atención</h2>
+          <small>en taller o esperando piezas</small>
+        </header>
+        <ul id="attention" class="mini-list"></ul>
+      </article>
+    </div>
+
+    <article class="card">
+      <header class="card-head">
+        <h2>Últimas ventas</h2>
+        <small>lo que ya has cobrado</small>
+      </header>
+      <ul id="recent-sales" class="mini-list"></ul>
+    </article>
+  </section>
+
+  <!-- ─────────────── FICHAS ─────────────── -->
+  <section id="view-fichas" class="view">
+    <div class="filters">
+      <div class="chips" id="status-chips"></div>
+      <label class="sort">
+        Ordenar
+        <select id="sort">
+          <option value="updated">Más reciente</option>
+          <option value="profit">Más beneficio</option>
+          <option value="cost">Más coste</option>
+          <option value="model">Modelo (A-Z)</option>
+        </select>
+      </label>
+    </div>
+
+    <div id="list" class="list"></div>
+    <p id="empty" class="empty" hidden></p>
+  </section>
+
+  <!-- ─────────────── DATOS ─────────────── -->
+  <section id="view-datos" class="view">
+    <div class="panel-grid">
+      <article class="card">
+        <header class="card-head">
+          <h2>Copia de seguridad</h2>
+          <small>los datos viven en este navegador</small>
+        </header>
+        <p class="hint">Descarga una copia de vez en cuando. Si cambias de móvil u ordenador, importa el fichero y lo tienes todo igual.</p>
+        <div class="row-btns">
+          <button class="btn" id="export-json">Descargar copia (.json)</button>
+          <button class="btn" id="import-json">Restaurar copia</button>
+        </div>
+      </article>
+
+      <article class="card">
+        <header class="card-head">
+          <h2>Excel / CSV</h2>
+          <small>traer lo que ya tienes</small>
+        </header>
+        <p class="hint">En Excel: <em>Archivo → Guardar como → CSV</em>. Luego súbelo aquí y eliges qué columna es cada cosa.</p>
+        <div class="row-btns">
+          <button class="btn" id="import-csv">Importar CSV</button>
+          <button class="btn" id="export-csv">Exportar a CSV</button>
+        </div>
+      </article>
+
+      <article class="card">
+        <header class="card-head">
+          <h2>Probar sin liarla</h2>
+          <small>para ver cómo queda</small>
+        </header>
+        <p class="hint">Añade tres fichas de ejemplo (un móvil vendido, uno publicado y una reparación de cliente) para ver el panel funcionando. Luego las borras y listo.</p>
+        <div class="row-btns">
+          <button class="btn" id="demo">Cargar ejemplos</button>
+        </div>
+      </article>
+
+      <article class="card danger-card">
+        <header class="card-head">
+          <h2>Zona peligrosa</h2>
+          <small>no se puede deshacer</small>
+        </header>
+        <p class="hint">Borra todas las fichas de este navegador. Descarga una copia antes.</p>
+        <div class="row-btns">
+          <button class="btn btn-danger" id="wipe">Borrar todo</button>
+        </div>
+      </article>
+    </div>
+  </section>
+</main>
+
+<!-- ─────────────── FICHA (panel lateral) ─────────────── -->
+<div id="drawer-backdrop" class="backdrop" hidden></div>
+<aside id="drawer" class="drawer" hidden aria-label="Ficha de reparación">
+  <header class="drawer-head">
+    <h2 id="drawer-title">Nueva ficha</h2>
+    <button class="icon-btn" id="drawer-close" aria-label="Cerrar">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.4 5 5 6.4 10.6 12 5 17.6 6.4 19 12 13.4 17.6 19 19 17.6 13.4 12 19 6.4 17.6 5 12 10.6 6.4 5Z"/></svg>
+    </button>
+  </header>
+
+  <form id="ticket-form" class="drawer-body">
+    <div class="seg" role="group" aria-label="Tipo de ficha">
+      <label><input type="radio" name="type" value="reventa" checked><span>Compra-venta</span></label>
+      <label><input type="radio" name="type" value="cliente"><span>Cliente</span></label>
+    </div>
+
+    <fieldset>
+      <legend>Equipo</legend>
+      <div class="grid-2">
+        <label>Marca
+          <input name="brand" list="dl-brands" placeholder="Samsung, Xiaomi, Apple…">
+        </label>
+        <label>Modelo
+          <input name="model" list="dl-models" placeholder="Redmi Note 12" required>
+        </label>
+        <label>Almacenamiento
+          <input name="storage" placeholder="128 GB">
+        </label>
+        <label>Color
+          <input name="color" placeholder="Negro">
+        </label>
+        <label class="col-2">IMEI / nº serie
+          <input name="imei" inputmode="numeric" placeholder="opcional">
+        </label>
+      </div>
+    </fieldset>
+
+    <fieldset data-only="cliente" hidden>
+      <legend>Cliente</legend>
+      <div class="grid-2">
+        <label>Nombre
+          <input name="customerName" placeholder="Nombre del cliente">
+        </label>
+        <label>Teléfono
+          <input name="customerPhone" inputmode="tel" placeholder="600 000 000">
+        </label>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Estado y avería</legend>
+      <div class="grid-2">
+        <label>Estado
+          <select name="status" id="status-select"></select>
+        </label>
+        <label>Fecha de entrada
+          <input name="createdAt" type="date">
+        </label>
+        <label class="col-2">Avería / trabajo a hacer
+          <textarea name="issue" rows="2" placeholder="Pantalla rota y no carga"></textarea>
+        </label>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Piezas</legend>
+      <div id="parts" class="parts"></div>
+      <button type="button" class="btn btn-ghost" id="add-part">+ Añadir pieza</button>
+    </fieldset>
+
+    <fieldset>
+      <legend>Números</legend>
+      <div class="grid-2">
+        <label data-only="reventa">Precio de compra (€)
+          <input name="purchaseCost" type="text" inputmode="decimal" placeholder="0">
+        </label>
+        <label>Otros gastos (€)
+          <input name="extraCost" type="text" inputmode="decimal" placeholder="envíos, protectores…">
+        </label>
+        <label>
+          <span data-label="list">Precio en Wallapop (€)</span>
+          <input name="listPrice" type="text" inputmode="decimal" placeholder="0">
+        </label>
+        <label>
+          <span data-label="sale">Precio final de venta (€)</span>
+          <input name="salePrice" type="text" inputmode="decimal" placeholder="al cerrar el trato">
+        </label>
+        <label class="col-2">Enlace de Wallapop
+          <input name="listingUrl" type="url" placeholder="https://es.wallapop.com/item/…">
+        </label>
+      </div>
+
+      <div class="summary" id="summary"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Notas</legend>
+      <textarea name="notes" rows="3" placeholder="Patrón de desbloqueo, detalles del cliente, dónde compraste la pieza…"></textarea>
+    </fieldset>
+  </form>
+
+  <footer class="drawer-foot">
+    <button class="btn btn-danger-ghost" id="delete-ticket" type="button" hidden>Borrar</button>
+    <span class="spacer"></span>
+    <button class="btn" id="cancel-ticket" type="button">Cancelar</button>
+    <button class="btn btn-primary" id="save-ticket" type="button">Guardar</button>
+  </footer>
+</aside>
+
+<!-- ─────────────── IMPORTAR CSV ─────────────── -->
+<div id="csv-modal" class="modal" hidden>
+  <div class="modal-card">
+    <header class="card-head">
+      <h2>Importar desde CSV</h2>
+      <button class="icon-btn" id="csv-close" aria-label="Cerrar">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.4 5 5 6.4 10.6 12 5 17.6 6.4 19 12 13.4 17.6 19 19 17.6 13.4 12 19 6.4 17.6 5 12 10.6 6.4 5Z"/></svg>
+      </button>
+    </header>
+    <div class="modal-body">
+      <p class="hint">Dime qué columna de tu Excel corresponde a cada campo. Lo que dejes en «— ninguna —» se queda vacío.</p>
+      <div id="csv-map" class="csv-map"></div>
+      <p class="hint" id="csv-count"></p>
+    </div>
+    <footer class="modal-foot">
+      <button class="btn" id="csv-cancel">Cancelar</button>
+      <button class="btn btn-primary" id="csv-confirm">Importar</button>
+    </footer>
+  </div>
+</div>
+
+<datalist id="dl-brands"></datalist>
+<datalist id="dl-models"></datalist>
+<datalist id="dl-parts"></datalist>
+
+<div id="toast" class="toast" hidden></div>
+
+<input type="file" id="file-input" accept=".json,.csv,text/csv,application/json" hidden>
+
+<script src="assets/store.js"></script>
+<script src="assets/csv.js"></script>
+<script src="assets/ui.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>
