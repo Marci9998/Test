@@ -35,6 +35,7 @@
     U.renderList(filter);
     U.renderSuggestions();
     U.renderProfiles();
+    U.renderStorageInfo();      // los textos nombran al perfil abierto
   }
 
   /* Texto que se manda al buscador de repuestos: modelo + pieza */
@@ -84,10 +85,13 @@
     el('drawer-backdrop').hidden = false;
     document.body.classList.add('drawer-open');
     document.body.style.overflow = 'hidden';
-    setTimeout(function () {
+
+    // Enfocar ya, no con retardo: si tarda, roba el foco a media palabra
+    // cuando alguien escribe rápido nada más abrir la ficha.
+    if (!ticket) {
       var first = el('ticket-form').querySelector('[name="model"]');
-      if (first && !ticket) first.focus();
-    }, 60);
+      if (first) first.focus();
+    }
   }
 
   function closeDrawer(force) {

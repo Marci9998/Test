@@ -15,7 +15,7 @@
   var S = global.Store;
   var POPUP_NAME = 'taller-repuestos';
 
-  var panel, iframe, sourceSelect, queryInput, quickEl, rememberBox;
+  var panel, iframe, sourceSelect, queryInput, quickEl, rememberBox, outLink;
   var currentUrl = '';
 
   function el(id) { return document.getElementById(id); }
@@ -37,36 +37,42 @@
   /* ── Abrir en ventana aparte (siempre funciona) ──────────── */
   function openOutside(url) {
     url = url || currentUrl;
-    if (!url) return;
+    if (!url) return false;
     var width = 480, height = Math.min(820, global.screen.availHeight - 60);
     var left = Math.max(0, global.screen.availWidth - width - 20);
     var features = 'popup=yes,width=' + width + ',height=' + height +
                    ',left=' + left + ',top=40,resizable=yes,scrollbars=yes';
-    var win = global.open(url, POPUP_NAME, features);
-    if (!win) {
-      // el navegador ha bloqueado la ventana emergente
-      global.open(url, '_blank', 'noopener');
-    } else {
-      win.focus();
-    }
+    var win = null;
+    try { win = global.open(url, POPUP_NAME, features); } catch (err) { win = null; }
+    if (win) { win.focus(); return true; }
+    return false;      // bloqueada: que se encargue el enlace
   }
 
   /* ── Cargar dentro del panel ─────────────────────────────── */
   function load(url) {
     currentUrl = url;
+    syncOutLink();
     var shop = currentShop() || {};
     rememberBox.checked = !!shop.popup;
 
     if (shop.popup) {                  // esta tienda va siempre en ventana aparte
       iframe.removeAttribute('src');
-      iframe.srcdoc = '<p style="font:15px system-ui;color:#666;padding:24px;text-align:center">' +
-        'Esta tienda se abre en una ventana aparte.</p>';
-      openOutside(url);
+      iframe.srcdoc = '<p style="font:15px system-ui;color:#666;padding:28px;text-align:center;' +
+        'line-height:1.5">' + esc(shop.name || 'Esta tienda') + ' está marcada para abrirse ' +
+        'en una ventana aparte.<br>Dale al botón <b>Abrir fuera ↗</b> de aquí abajo.</p>';
       return;
     }
 
     iframe.removeAttribute('srcdoc');
     iframe.src = url;
+  }
+
+  /* El botón de abrir fuera es un enlace de verdad: así, si el navegador
+     bloquea la ventanita, al menos abre en una pestaña nueva. */
+  function syncOutLink() {
+    if (!outLink) return;
+    if (currentUrl) outLink.href = currentUrl;
+    else outLink.removeAttribute('href');
   }
 
   function search(query, shopId) {
@@ -110,8 +116,8 @@
      así que van directos a ventana aparte. */
   function renderQuick() {
     quickEl.innerHTML = S.WALLAPOP_LINKS.map(function (link) {
-      return '<button type="button" class="shop-chip" data-url="' + esc(link.url) + '">' +
-        esc(link.name) + ' ↗</button>';
+      return '<a class="shop-chip" href="' + esc(link.url) + '" target="_blank" rel="noopener">' +
+        esc(link.name) + ' ↗</a>';
     }).join('');
   }
 
@@ -167,9 +173,15 @@
     renderQuick();
 
     el('shop-close').addEventListener('click', close);
-    el('shop-open-out').addEventListener('click', function () { openOutside(); });
+    el('shop-open-out').addEventListener('click', function () {
+      if (!openOutside() && currentUrl) global.open(currentUrl, '_blank', 'noopener');
+    });
     el('shop-go').addEventListener('click', function () { search(); });
-    el('shop-blocked-open').addEventListener('click', function () { openOutside(); });
+    outLink = el('shop-blocked-open');
+    syncOutLink();
+    outLink.addEventListener('click', function (e) {
+      if (openOutside()) e.preventDefault();   // si cabe la ventanita, mejor que una pestaña
+    });
 
     queryInput.addEventListener('keydown', function (e) {
       if (e.key === 'Enter') { e.preventDefault(); search(); }
@@ -188,12 +200,12 @@
       });
       S.saveShops(list);
       if (global.UI) global.UI.renderShopSettings();
-      if (rememberBox.checked) load(currentUrl);
+      load(currentUrl);
     });
 
     quickEl.addEventListener('click', function (e) {
       var chip = e.target.closest('.shop-chip');
-      if (chip) openOutside(chip.dataset.url);
+      if (chip && openOutside(chip.href)) e.preventDefault();
     });
 
     makeDraggable(panel.querySelector('.shop-head'));

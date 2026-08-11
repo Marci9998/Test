@@ -701,7 +701,11 @@ code {
   font-size: 12px;
   cursor: pointer;
 }
+.shop-chip { text-decoration: none; display: inline-block; }
 .shop-chip:hover { color: var(--text); border-color: var(--accent); }
+
+a.btn { text-decoration: none; }
+a.btn:not([href]) { opacity: .5; pointer-events: none; }
 
 .shop-frame { position: relative; flex: 1; margin: 8px 10px 0; min-height: 0; }
 .shop-frame iframe {

@@ -27,6 +27,10 @@ USER_NAME="taller"
 
 BOLD=$'\033[1m'; DIM=$'\033[2m'; RED=$'\033[31m'; GREEN=$'\033[32m'; YELLOW=$'\033[33m'; OFF=$'\033[0m'
 
+WORK_DIR=""
+cleanup() { [ -n "$WORK_DIR" ] && rm -rf "$WORK_DIR"; }
+trap cleanup EXIT
+
 say()  { printf '%s\n' "$*"; }
 info() { printf '  %s\n' "$*"; }
 ok()   { printf '%s✓%s %s\n' "$GREEN" "$OFF" "$*"; }
@@ -123,6 +127,11 @@ make_user() {
   chown -R "$USER_NAME:$USER_NAME" "$DATA_DIR" 2>/dev/null || true
 }
 
+# systemctl puede estar instalado sin ser el init del sistema (contenedores, WSL…)
+has_systemd() {
+  command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]
+}
+
 write_service() {
   local run_as="$USER_NAME"
   id -u "$USER_NAME" >/dev/null 2>&1 || run_as="root"
@@ -154,9 +163,9 @@ ReadWritePaths=${DATA_DIR}
 WantedBy=multi-user.target
 EOF
 
-  systemctl daemon-reload
+  systemctl daemon-reload || return 1
   systemctl enable "$SERVICE" >/dev/null 2>&1 || true
-  systemctl restart "$SERVICE"
+  systemctl restart "$SERVICE" || return 1
 }
 
 lan_ip() {
@@ -174,11 +183,13 @@ lan_ip() {
 uninstall() {
   need_root
   say "${BOLD}Desinstalando el Taller…${OFF}"
-  if command -v systemctl >/dev/null 2>&1; then
+  if has_systemd; then
     systemctl stop "$SERVICE" 2>/dev/null || true
     systemctl disable "$SERVICE" 2>/dev/null || true
     rm -f "/etc/systemd/system/${SERVICE}.service"
-    systemctl daemon-reload
+    systemctl daemon-reload 2>/dev/null || true
+  else
+    rm -f "/etc/systemd/system/${SERVICE}.service"
   fi
   rm -rf "$APP_DIR"
   ok "Programa borrado."
@@ -200,31 +211,39 @@ main() {
   find_python || install_python
   ok "Python: $PYTHON"
 
-  local tmp
-  tmp="$(mktemp -d)"
-  trap 'rm -rf "$tmp"' EXIT
+  WORK_DIR="$(mktemp -d)"
 
   info "Descargando la última versión (rama ${BRANCH})…"
-  download "$tmp"
+  download "$WORK_DIR"
   ok "Descargado"
 
-  install_files "$tmp/src"
+  install_files "$WORK_DIR/src"
   ok "Instalado en $APP_DIR"
 
   make_user
   ok "Datos en $DATA_DIR"
 
-  if command -v systemctl >/dev/null 2>&1; then
-    write_service
-    sleep 1
-    if systemctl is-active --quiet "$SERVICE"; then
-      ok "Servicio en marcha (arranca solo al encender el equipo)"
+  if has_systemd; then
+    if write_service; then
+      sleep 1
+      if systemctl is-active --quiet "$SERVICE"; then
+        ok "Servicio en marcha (arranca solo al encender el equipo)"
+      else
+        warn "El servicio no arrancó. Mira qué pasa con: journalctl -u ${SERVICE} -n 30"
+      fi
     else
-      warn "El servicio no arrancó. Mira qué pasa con: journalctl -u ${SERVICE} -n 30"
+      warn "No se pudo registrar el servicio; arráncalo a mano cuando quieras:"
+      info "sudo TALLER_PORT=${PORT} TALLER_DATA=${DATA_DIR} ${PYTHON} ${APP_DIR}/server.py"
     fi
   else
-    warn "Este sistema no usa systemd; arráncalo a mano:"
-    info "TALLER_PORT=${PORT} TALLER_DATA=${DATA_DIR} ${PYTHON} ${APP_DIR}/server.py"
+    warn "Este sistema no arranca con systemd; el programa está instalado, pero hay"
+    warn "que arrancarlo a mano (o con lo que use tu sistema):"
+    info "sudo TALLER_PORT=${PORT} TALLER_DATA=${DATA_DIR} ${PYTHON} ${APP_DIR}/server.py"
+  fi
+
+  # Al final, porque algún fichero puede haberlo creado root al probar a mano
+  if id -u "$USER_NAME" >/dev/null 2>&1; then
+    chown -R "$USER_NAME:$USER_NAME" "$DATA_DIR" 2>/dev/null || true
   fi
 
   local ip; ip="$(lan_ip)"
@@ -233,9 +252,13 @@ main() {
   say "  En este equipo : ${BOLD}http://localhost:${PORT}${OFF}"
   say "  Desde el móvil : ${BOLD}http://${ip}:${PORT}${OFF}"
   say ""
-  say "${DIM}  Parar/arrancar : sudo systemctl stop|start ${SERVICE}"
-  say "  Ver el registro: sudo journalctl -u ${SERVICE} -f"
-  say "  Desinstalar    : curl -fsSL <esta misma url> | sudo bash -s -- --uninstall${OFF}"
+  if has_systemd; then
+    say "${DIM}  Parar/arrancar : sudo systemctl stop|start ${SERVICE}"
+    say "  Ver el registro: sudo journalctl -u ${SERVICE} -f"
+    say "  Desinstalar    : curl -fsSL <esta misma url> | sudo bash -s -- --uninstall${OFF}"
+  else
+    say "${DIM}  Desinstalar    : curl -fsSL <esta misma url> | sudo bash -s -- --uninstall${OFF}"
+  fi
   say ""
   warn "Cualquiera de tu red puede abrir esa dirección: no lleva contraseña."
   say ""

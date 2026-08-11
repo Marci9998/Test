@@ -141,9 +141,9 @@
       <article class="card">
         <header class="card-head">
           <h2>Copia de seguridad</h2>
-          <small>los datos viven en este navegador</small>
+          <small>del perfil que tengas abierto</small>
         </header>
-        <p class="hint">Descarga una copia de vez en cuando. Si cambias de móvil u ordenador, importa el fichero y lo tienes todo igual.</p>
+        <p class="hint" id="backup-hint">Descarga una copia de vez en cuando. Si cambias de móvil u ordenador, importa el fichero y lo tienes todo igual.</p>
         <div class="row-btns">
           <button class="btn" id="export-json">Descargar copia (.json)</button>
           <button class="btn" id="import-json">Restaurar copia</button>
@@ -178,7 +178,7 @@
           <h2>Zona peligrosa</h2>
           <small>no se puede deshacer</small>
         </header>
-        <p class="hint">Borra todas las fichas de este navegador. Descarga una copia antes.</p>
+        <p class="hint" id="wipe-hint">Borra todas las fichas de este perfil. Descarga una copia antes.</p>
         <div class="row-btns">
           <button class="btn btn-danger" id="wipe">Borrar todo</button>
         </div>
@@ -350,7 +350,7 @@
     <label class="shop-remember" title="Recordar para esta tienda">
       <input type="checkbox" id="shop-remember"> siempre fuera
     </label>
-    <button class="btn btn-primary sm" id="shop-blocked-open">Abrir fuera ↗</button>
+    <a class="btn btn-primary sm" id="shop-blocked-open" target="_blank" rel="noopener">Abrir fuera ↗</a>
   </footer>
 </section>
 

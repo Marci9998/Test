@@ -86,9 +86,10 @@ copiar el precio sin tapar nada.
 cabeceras (`X-Frame-Options` / `Content-Security-Policy`) que impiden verse dentro de otra
 web. Cuando pasa eso el marco sale en blanco, y *el navegador no permite detectarlo*: una
 página bloqueada y una que ha cargado bien son indistinguibles desde fuera. Por eso hay
-siempre a mano un botón **«Abrir fuera ↗»**, que la abre en una ventana pequeña al lado
-(eso funciona siempre), y una casilla **«siempre fuera»** para que esa tienda se abra
-directamente así y no vuelvas a ver el marco en blanco.
+siempre a mano un botón **«Abrir fuera ↗»**, que la abre en una ventana pequeña al lado (y
+si el navegador bloquea las ventanas emergentes, en una pestaña nueva: es un enlace de
+verdad, no se queda en nada), y una casilla **«siempre fuera»** para marcar esa tienda y
+dejar de pelearte con el marco en blanco.
 
 Los botones **Mis ventas** y **Mensajes** van a tu Wallapop, y se abren siempre fuera
 porque necesitan tu sesión iniciada.
