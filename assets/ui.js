@@ -33,7 +33,9 @@
     var s = S.stats();
 
     el('kpis').innerHTML = [
-      kpi('En taller', String(s.open), s.invested ? S.money(s.invested) + ' invertidos' : 'nada pendiente'),
+      kpi('En taller', String(s.open),
+        s.invested ? S.money(s.invested) + ' invertidos'
+                   : (s.open ? 'sin gastos apuntados' : 'nada pendiente')),
       kpi('Beneficio previsto', S.money(s.expected), 'si vendes lo que tienes', sign(s.expected)),
       kpi('Vendido este mes', String(s.soldThisMonth), S.money(s.profitMonth) + ' de beneficio', sign(s.profitMonth)),
       kpi('Beneficio total', S.money(s.profitTotal),
