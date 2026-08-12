@@ -219,14 +219,22 @@ def build(ticket, business=None, profile_name='', kind='resguardo', width='80',
             t.pair('Otros gastos', _money(ticket['extraCost']), size=8)
 
     total = _total(ticket, cliente, entrega)
+    grande = 11 if ancho >= 70 else 9.5
     t.rule()
-    etiqueta_total = 'COSTE TOTAL' if costs else ('TOTAL' if cliente else 'PRECIO')
-    t.pair(etiqueta_total, _money(total if not costs else _cost(ticket, cliente)),
-           size=11 if ancho >= 70 else 9.5, bold=True, gap=3)
 
     if costs:
-        t.pair('Precio de venta', _money(total), size=8)
-        t.pair('Beneficio', _money(total - _cost(ticket, cliente)), size=8.5, bold=True)
+        coste = _cost(ticket, cliente)
+        t.pair('COSTE TOTAL', _money(coste), size=grande, bold=True, gap=3)
+        t.pair('Precio de venta', _money(total) if total is not None else 'sin poner', size=8)
+        if total is not None:
+            t.pair('Beneficio', _money(total - coste), size=8.5, bold=True)
+    elif total is None:
+        # sin precio puesto se dice, y no se inventa un número
+        t.pair('TOTAL' if cliente else 'PRECIO', 'pendiente', size=grande, bold=True, gap=3)
+        t.text('Se le dirá el precio antes de tocar nada.' if cliente
+               else 'Precio todavía sin poner.', size=7, color=GREY, gap=1.4)
+    else:
+        t.pair('TOTAL' if cliente else 'PRECIO', _money(total), size=grande, bold=True, gap=3)
     t.rule()
 
     # — estado y avisos —
@@ -380,16 +388,15 @@ def _qty(value):
 def _total(ticket, cliente, entrega):
     """Lo que se le cobra al cliente, o lo que vale el móvil de reventa.
 
-    En una ficha de cliente el total es lo presupuestado (o lo cobrado si ya
-    se entregó). En una de reventa, el precio al que se vende, que es lo que
-    va en el papel que se le da al comprador.
+    Devuelve None si todavía no hay precio puesto. Aquí **no** se puede
+    tirar de los costes como apaño: lo apuntado en las piezas es lo que te
+    cuesta a ti, y sacarlo en el papel del cliente le estaría enseñando tu
+    margen y, encima, un número que no es el que va a pagar.
     """
     if entrega and _num(ticket.get('salePrice')):
         return _num(ticket['salePrice'])
     if _num(ticket.get('listPrice')):
         return _num(ticket['listPrice'])
-    if cliente:
-        piezas = sum(_num(p.get('qty') or 1) * _num(p.get('unitCost'))
-                     for p in ticket.get('parts') or [])
-        return piezas + _num(ticket.get('extraCost'))
-    return _num(ticket.get('salePrice'))
+    if _num(ticket.get('salePrice')):
+        return _num(ticket['salePrice'])
+    return None

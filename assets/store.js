@@ -362,6 +362,7 @@
 
   /* Guardado: se junta lo que pase en el mismo instante y se manda una vez */
   var pending = null, saving = false, dirty = false;
+  var inFlight = Promise.resolve();   // el guardado que está saliendo ahora mismo
 
   function save() {
     dirty = true;
@@ -376,7 +377,12 @@
   }
 
   function flush(keepalive) {
-    if (!dirty || saving) return Promise.resolve();
+    if (!dirty) return Promise.resolve();
+    // Si ya hay un guardado en vuelo no se pisan, pero tampoco se puede
+    // dejar el cambio ahí tirado: se encola detrás del que está saliendo.
+    // Si no, se quedaba sin mandar hasta que tocaras otra cosa, y cerrando
+    // la web en ese momento se perdía.
+    if (saving) return inFlight.then(function () { return flush(keepalive); });
     dirty = false;
     if (!remote) {
       if (!lsSet(TICKETS_KEY + activeId, tickets)) {
@@ -385,12 +391,13 @@
       return Promise.resolve();
     }
     saving = true;
-    return api('/profiles/' + activeId + '/tickets', {
+    inFlight = api('/profiles/' + activeId + '/tickets', {
       method: 'PUT', body: tickets, keepalive: !!keepalive
     }).catch(function (err) {
       dirty = true;                       // lo volveremos a intentar
       onError('No se pudo guardar en el servidor: ' + err.message);
     }).then(function () { saving = false; });
+    return inFlight;
   }
 
   function all() { return tickets; }
@@ -444,15 +451,20 @@
     }).catch(function () { quotes = []; return quotes; });
   }
 
+  /* El último guardado que ha salido, para poder esperarlo antes de
+     pedirle al servidor el PDF de un presupuesto recién creado. */
+  var quotesInFlight = Promise.resolve();
+
   function saveQuotesList() {
     if (!remote) {
       lsSet(QUOTES_KEY + activeId, quotes);
       return Promise.resolve();
     }
-    return api('/profiles/' + activeId + '/quotes', { method: 'PUT', body: quotes })
+    quotesInFlight = api('/profiles/' + activeId + '/quotes', { method: 'PUT', body: quotes })
       .catch(function (err) {
         onError('No se pudo guardar el presupuesto: ' + err.message);
       });
+    return quotesInFlight;
   }
 
   function allQuotes() { return quotes; }
@@ -828,6 +840,7 @@
     profileKind: profileKind,
     onError: function (fn) { onError = fn || function () {}; },
     flush: flush,
+    quotesSaved: function () { return quotesInFlight; },
 
     profiles: function () { return profiles; },
     activeProfile: activeProfile,

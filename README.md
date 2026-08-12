@@ -219,6 +219,9 @@ ese sí lleva el desglose completo con base, descuento, IVA y total.
 > «ajustar a la página» sale encogido y descuadrado — es el fallo típico con estas
 > impresoras.
 
+Si todavía no has puesto el presupuesto, el ticket pone **«TOTAL pendiente»** en vez de un
+número: nunca saca tus costes como si fueran el precio del cliente.
+
 Un detalle pensado a propósito: en el papel del cliente salen las piezas **sin importes**,
 sólo la lista de lo que se ha cambiado. Lo que hay apuntado en cada pieza de una ficha es
 lo que te cuesta **a ti**, no lo que le cobras, y no tiene sentido enseñarle tu margen. Si

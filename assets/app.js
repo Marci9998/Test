@@ -711,8 +711,10 @@
 
     /* Teclado */
     document.addEventListener('keydown', function (e) {
+      // sólo se cierra lo más de arriba, nunca dos cosas de un tecleo
       if (e.key === 'Escape') {
-        if (!el('csv-modal').hidden) el('csv-modal').hidden = true;
+        if (!el('print-modal').hidden) el('print-modal').hidden = true;
+        else if (!el('csv-modal').hidden) el('csv-modal').hidden = true;
         else if (!el('profile-modal').hidden) closeProfileModal();
         else if (!el('account-modal').hidden) closeAccountModal();
         else if (Quotes.isOpen()) Quotes.close(false);
@@ -989,13 +991,13 @@
       if (!current) return;
       if (!S.isRemote()) return U.toast('Imprimir el ticket necesita el servidor');
 
-      // el ticket lo monta el servidor a partir de lo guardado, así que
-      // primero se guarda lo que haya escrito, pero sin cerrar la ficha
+      // El ticket lo monta el servidor con lo que tenga guardado, así que
+      // hay que esperar a que llegue: si no, el papel sale con lo de antes.
       var ticket = syncFromForm();
       S.upsert(ticket);
       snapshot = JSON.stringify(current);
       refresh();
-      openPrint(ticket);
+      S.flush().then(function () { openPrint(ticket); });
     });
 
     function cerrar() { el('print-modal').hidden = true; printTarget = null; }

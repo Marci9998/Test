@@ -379,10 +379,14 @@
       if (!S.isRemote()) return U.toast('El ticket necesita el servidor');
       var quote = save();
       if (!quote) return;
-      var url = S.quoteTicketUrl(quote.id, S.prefs().printWidth || '80');
-      var win = global.open(url, '_blank');
-      if (!win) return U.toast('El navegador ha bloqueado la ventana.');
-      try { win.addEventListener('load', function () { win.print(); }); } catch (err) { /* da igual */ }
+      // hay que esperar a que el servidor lo tenga: si no, uno recién
+      // creado devuelve «No existe ese presupuesto» en la pestaña nueva
+      S.quotesSaved().then(function () {
+        var url = S.quoteTicketUrl(quote.id, S.prefs().printWidth || '80');
+        var win = global.open(url, '_blank');
+        if (!win) return U.toast('El navegador ha bloqueado la ventana.');
+        try { win.addEventListener('load', function () { win.print(); }); } catch (err) { /* da igual */ }
+      });
     });
 
     el('quote-add-line').addEventListener('click', function () {

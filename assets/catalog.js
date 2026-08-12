@@ -158,9 +158,15 @@
       if (callback) callback(item);
     });
 
+    // En captura y parando la propagación: si no, el Escape sigue su camino
+    // hasta el manejador general y cierra también la ficha de debajo.
     document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape' && isOpen()) { e.preventDefault(); close(); }
-    });
+      if (e.key === 'Escape' && isOpen()) {
+        e.preventDefault();
+        e.stopPropagation();
+        close();
+      }
+    }, true);
   }
 
   global.Catalog = {

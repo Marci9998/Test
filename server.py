@@ -32,7 +32,7 @@ import urllib.request
 import uuid
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlparse, unquote, parse_qs, urljoin, urlencode
+from urllib.parse import urlparse, unquote, parse_qs, urljoin, urlencode, quote
 
 import catalog
 
@@ -803,10 +803,10 @@ class Handler(BaseHTTPRequestHandler):
                 sys.stderr.write('Error montando el ticket: %r\n' % (err,))
                 return self._error(500, 'No se pudo montar el ticket')
 
-            name = 'ticket-%s.pdf' % (ticket.get('model') or ticket_id).replace(' ', '-')[:40]
+            name = 'ticket-%s.pdf' % (ticket.get('model') or ticket_id)
             como = 'attachment' if (params.get('download') or [''])[0] else 'inline'
             return self._send(200, data, 'application/pdf',
-                              {'Content-Disposition': '%s; filename="%s"' % (como, name)})
+                              {'Content-Disposition': disposition(como, name)})
 
         # adjuntos de una ficha
         if len(parts) == 5 and parts[0] == 'profiles' and parts[2] == 'tickets' \
@@ -848,10 +848,9 @@ class Handler(BaseHTTPRequestHandler):
                         body = fh.read()
                 except OSError:
                     return self._error(404, 'El fichero ya no está en el disco')
-                disposition = 'inline' if entry.get('ext') == '.pdf' else 'attachment'
+                como = 'inline' if entry.get('ext') == '.pdf' else 'attachment'
                 return self._send(200, body, FILE_TYPES.get(entry.get('ext'), 'application/octet-stream'),
-                                  {'Content-Disposition': '%s; filename="%s"'
-                                   % (disposition, entry['name'].replace('"', ''))})
+                                  {'Content-Disposition': disposition(como, entry['name'])})
             if method == 'DELETE':
                 self.storage.delete_file(profile_id, file_id)
                 return self._json({'ok': True})
@@ -907,7 +906,7 @@ class Handler(BaseHTTPRequestHandler):
             name = 'presupuesto-%s-ticket.pdf' % (quote.get('number') or quote.get('id'))
             como = 'attachment' if (params.get('download') or [''])[0] else 'inline'
             return self._send(200, data, 'application/pdf',
-                              {'Content-Disposition': '%s; filename="%s"' % (como, name)})
+                              {'Content-Disposition': disposition(como, name)})
 
         if len(parts) == 5 and parts[0] == 'profiles' and parts[2] == 'quotes' \
                 and parts[4] == 'pdf' and method == 'GET':
@@ -932,7 +931,7 @@ class Handler(BaseHTTPRequestHandler):
 
             name = 'presupuesto-%s.pdf' % (quote.get('number') or quote.get('id'))
             return self._send(200, data, 'application/pdf',
-                              {'Content-Disposition': 'attachment; filename="%s"' % name})
+                              {'Content-Disposition': disposition('attachment', name)})
 
         # — catálogo de piezas del proveedor —
 
@@ -1275,6 +1274,38 @@ def allowed_hosts(settings):
         if len(parts) >= 2:
             domains.add('.'.join(parts[-2:]))
     return domains, exact
+
+
+def disposition(kind, filename):
+    """La cabecera Content-Disposition, con el nombre saneado.
+
+    El nombre sale de lo que escribe el usuario (el modelo del móvil, el
+    número del presupuesto), así que hay que limpiarlo antes de meterlo en
+    una cabecera:
+
+      · un salto de línea partiría la respuesta y dejaría colar cabeceras
+        inventadas;
+      · una comilla rompería el entrecomillado del nombre;
+      · una letra que no sea latina reventaría al escribir la cabecera y el
+        fichero no llegaría a bajarse.
+
+    Se manda el nombre dos veces, como manda el RFC 6266: uno de repuesto
+    en ASCII pelado y el de verdad en UTF-8, que es el que usan los
+    navegadores de este siglo.
+    """
+    name = str(filename or 'archivo')
+    name = re.sub(r'[\r\n\t"\\/]', '', name).strip() or 'archivo'
+    name = name[:80]
+
+    # el de repuesto: sin acentos y sólo con letras de las de toda la vida
+    plain = unicodedata.normalize('NFKD', name)
+    plain = ''.join(c for c in plain if not unicodedata.combining(c))
+    plain = re.sub(r'[^A-Za-z0-9._-]+', '-', plain).strip('-') or 'archivo'
+
+    header = '%s; filename="%s"' % (kind, plain)
+    if plain != name:
+        header += "; filename*=UTF-8''" + quote(name, safe='')
+    return header
 
 
 def public_source(source, count=0):
