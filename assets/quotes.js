@@ -374,6 +374,17 @@
       if (card) open(S.quote(card.dataset.quote));
     });
 
+    /* El mismo presupuesto, pero en el rollo de papel térmico */
+    el('quote-ticket').addEventListener('click', function () {
+      if (!S.isRemote()) return U.toast('El ticket necesita el servidor');
+      var quote = save();
+      if (!quote) return;
+      var url = S.quoteTicketUrl(quote.id, S.prefs().printWidth || '80');
+      var win = global.open(url, '_blank');
+      if (!win) return U.toast('El navegador ha bloqueado la ventana.');
+      try { win.addEventListener('load', function () { win.print(); }); } catch (err) { /* da igual */ }
+    });
+
     el('quote-add-line').addEventListener('click', function () {
       sync();
       current.lines.push({ id: S.uid(), concept: '', note: '', qty: 1, unitPrice: 0 });

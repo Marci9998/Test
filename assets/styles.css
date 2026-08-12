@@ -1084,3 +1084,42 @@ a.btn:not([href]) { opacity: .5; pointer-events: none; }
   background: var(--bg-soft);
 }
 .picker-foot small { color: var(--text-faint); font-size: 12px; }
+
+/* ─────────────────── Imprimir en papel térmico ─────────────────── */
+.print-group {
+  border: 0;
+  padding: 0;
+  margin: 0 0 16px;
+}
+.print-group legend {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  padding: 0;
+  margin-bottom: 8px;
+}
+.print-opt {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  cursor: pointer;
+  margin-bottom: 6px;
+}
+.print-opt:hover { background: var(--bg-soft); }
+.print-opt:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+/* los inputs de aquí van al 100 % de ancho por la regla de más arriba, y un
+   radio a pantalla completa deja el texto fuera de la caja */
+.print-opt input[type="radio"] {
+  width: auto;
+  flex: none;
+  margin: 3px 0 0;
+  padding: 0;
+}
+.print-opt span { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.print-opt b { font-size: 13.5px; font-weight: 600; }
+.print-opt small { font-size: 11.5px; color: var(--text-faint); line-height: 1.35; }

@@ -529,6 +529,21 @@
     return '/api/profiles/' + activeId + '/files/' + fileId;
   }
 
+  /* El ticket de papel térmico de una ficha (lo monta el servidor) */
+  function ticketPdfUrl(ticketId, options) {
+    options = options || {};
+    return '/api/profiles/' + activeId + '/tickets/' + ticketId + '/ticket' +
+      '?kind=' + encodeURIComponent(options.kind || 'resguardo') +
+      '&width=' + encodeURIComponent(options.width || '80') +
+      (options.costs ? '&costs=1' : '');
+  }
+
+  /* Y el del presupuesto, para darlo en mano al momento */
+  function quoteTicketUrl(quoteId, width) {
+    return '/api/profiles/' + activeId + '/quotes/' + quoteId + '/ticket' +
+      '?width=' + encodeURIComponent(width || '80');
+  }
+
   /* ── Lotes de compra ─────────────────────────────────────── */
   var batches = [];
   var BATCHES_KEY = 'taller.batches.v1.';
@@ -848,6 +863,8 @@
     uploadFile: uploadFile,
     deleteFile: deleteFile,
     fileUrl: fileUrl,
+    ticketPdfUrl: ticketPdfUrl,
+    quoteTicketUrl: quoteTicketUrl,
 
     batches: allBatches,
     batch: batch,

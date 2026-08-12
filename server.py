@@ -777,6 +777,37 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({'ok': True, 'count': len(tickets)})
             return self._error(405, 'Método no permitido')
 
+        # el ticket de papel térmico de una ficha
+        if len(parts) == 5 and parts[0] == 'profiles' and parts[2] == 'tickets' \
+                and parts[4] == 'ticket' and method == 'GET':
+            profile_id = safe_id(parts[1])
+            ticket_id = safe_id(parts[3])
+            ticket = None
+            for item in self.storage.tickets(profile_id):
+                if item.get('id') == ticket_id:
+                    ticket = item
+            if not ticket:
+                return self._error(404, 'No existe esa ficha')
+
+            params = parse_qs(urlparse(self.path).query)
+            kind = (params.get('kind') or ['resguardo'])[0]
+            width = (params.get('width') or ['80'])[0]
+            costs = (params.get('costs') or [''])[0] in ('1', 'true', 'si')
+
+            try:
+                import ticketpdf
+                data = ticketpdf.build(ticket, (self.storage.settings() or {}).get('business'),
+                                       self._profile_name(profile_id), kind, width,
+                                       costs=costs)
+            except Exception as err:                   # noqa: BLE001
+                sys.stderr.write('Error montando el ticket: %r\n' % (err,))
+                return self._error(500, 'No se pudo montar el ticket')
+
+            name = 'ticket-%s.pdf' % (ticket.get('model') or ticket_id).replace(' ', '-')[:40]
+            como = 'attachment' if (params.get('download') or [''])[0] else 'inline'
+            return self._send(200, data, 'application/pdf',
+                              {'Content-Disposition': '%s; filename="%s"' % (como, name)})
+
         # adjuntos de una ficha
         if len(parts) == 5 and parts[0] == 'profiles' and parts[2] == 'tickets' \
                 and parts[4] == 'files':
@@ -854,6 +885,30 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({'ok': True, 'count': len(quotes)})
             return self._error(405, 'Método no permitido')
 
+        # el presupuesto en papel térmico
+        if len(parts) == 5 and parts[0] == 'profiles' and parts[2] == 'quotes' \
+                and parts[4] == 'ticket' and method == 'GET':
+            profile_id = safe_id(parts[1])
+            quote = self.storage.quote(profile_id, safe_id(parts[3]))
+            if not quote:
+                return self._error(404, 'No existe ese presupuesto')
+
+            params = parse_qs(urlparse(self.path).query)
+            width = (params.get('width') or ['80'])[0]
+            try:
+                import ticketpdf
+                data = ticketpdf.build_quote(
+                    quote, (self.storage.settings() or {}).get('business'),
+                    self._profile_name(profile_id), width)
+            except Exception as err:                   # noqa: BLE001
+                sys.stderr.write('Error montando el ticket: %r\n' % (err,))
+                return self._error(500, 'No se pudo montar el ticket')
+
+            name = 'presupuesto-%s-ticket.pdf' % (quote.get('number') or quote.get('id'))
+            como = 'attachment' if (params.get('download') or [''])[0] else 'inline'
+            return self._send(200, data, 'application/pdf',
+                              {'Content-Disposition': '%s; filename="%s"' % (como, name)})
+
         if len(parts) == 5 and parts[0] == 'profiles' and parts[2] == 'quotes' \
                 and parts[4] == 'pdf' and method == 'GET':
             profile_id = safe_id(parts[1])
@@ -861,10 +916,7 @@ class Handler(BaseHTTPRequestHandler):
             if not quote:
                 return self._error(404, 'No existe ese presupuesto')
 
-            profile_name = ''
-            for p in self.storage.profiles():
-                if p['id'] == profile_id:
-                    profile_name = p.get('name', '')
+            profile_name = self._profile_name(profile_id)
 
             attachments = []
             if quote.get('ticketId'):
@@ -970,6 +1022,12 @@ class Handler(BaseHTTPRequestHandler):
             return self._error(405, 'Método no permitido')
 
         return self._error(404, 'Ruta desconocida')
+
+    def _profile_name(self, profile_id):
+        for profile in self.storage.profiles():
+            if profile['id'] == profile_id:
+                return profile.get('name', '')
+        return ''
 
     # — ayudas del catálogo —
 

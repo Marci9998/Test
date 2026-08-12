@@ -80,6 +80,7 @@
 
     el('drawer-title').textContent = ticket ? S.title(current) : 'Nueva ficha';
     el('delete-ticket').hidden = !ticket;
+    el('ticket-print').hidden = !ticket || !S.isRemote();
 
     var form = el('ticket-form');
     form.reset();
@@ -679,7 +680,8 @@
       U.toast('Tiendas restauradas');
     });
 
-    /* Tarifas de proveedor */
+    /* Imprimir y tarifas de proveedor */
+    wirePrint();
     wireCatalog();
 
     /* Datos */
@@ -928,6 +930,100 @@
     var node = el('account-error');
     node.textContent = message;
     node.hidden = false;
+  }
+
+  /* ── Imprimir en papel térmico ───────────────────────────── */
+  /* El PDF sale del servidor ya con el ancho exacto del rollo (80 o 58 mm).
+     Se abre en una ventana aparte y se manda a imprimir desde ahí: así el
+     navegador no reescala nada, que es lo que descuadra estos tickets. */
+
+  var printTarget = null;      // la ficha que se va a imprimir
+
+  function openPrint(ticket) {
+    printTarget = ticket;
+    var cliente = ticket.type === 'cliente';
+
+    // los papeles no se llaman igual si es una reparación o un móvil de reventa
+    el('print-kind1').textContent = cliente ? 'Resguardo de entrada' : 'Ficha del equipo';
+    el('print-kind1-sub').textContent = cliente
+      ? 'Lo que se le da al cliente cuando deja el equipo'
+      : 'Para pegar en la bolsa del móvil mientras lo tienes';
+    el('print-kind2').textContent = cliente ? 'Ticket de entrega' : 'Ticket de venta';
+    el('print-kind2-sub').textContent = cliente
+      ? 'Al recogerlo y pagar'
+      : 'Para el comprador, al vendérselo';
+
+    // por defecto, lo que toca según el estado de la ficha
+    var kind = S.isSold(ticket) ? 'entrega' : 'resguardo';
+    check('print-kind', kind);
+    check('print-width', S.prefs().printWidth || '80');
+
+    el('print-modal').hidden = false;
+  }
+
+  function check(name, value) {
+    Array.prototype.forEach.call(
+      document.querySelectorAll('[name="' + name + '"]'), function (input) {
+        input.checked = input.value === value;
+      });
+  }
+
+  function checked(name) {
+    var input = document.querySelector('[name="' + name + '"]:checked');
+    return input ? input.value : '';
+  }
+
+  function printUrl() {
+    var kind = checked('print-kind');
+    var width = checked('print-width') || '80';
+    S.prefs({ printWidth: width });
+    return S.ticketPdfUrl(printTarget.id, {
+      kind: kind === 'taller' ? 'entrega' : kind,
+      width: width,
+      costs: kind === 'taller'
+    });
+  }
+
+  function wirePrint() {
+    el('ticket-print').addEventListener('click', function () {
+      if (!current) return;
+      if (!S.isRemote()) return U.toast('Imprimir el ticket necesita el servidor');
+
+      // el ticket lo monta el servidor a partir de lo guardado, así que
+      // primero se guarda lo que haya escrito, pero sin cerrar la ficha
+      var ticket = syncFromForm();
+      S.upsert(ticket);
+      snapshot = JSON.stringify(current);
+      refresh();
+      openPrint(ticket);
+    });
+
+    function cerrar() { el('print-modal').hidden = true; printTarget = null; }
+    el('print-close').addEventListener('click', cerrar);
+    el('print-cancel').addEventListener('click', cerrar);
+    el('print-modal').addEventListener('click', function (e) {
+      if (e.target === el('print-modal')) cerrar();
+    });
+
+    el('print-go').addEventListener('click', function () {
+      var url = printUrl();
+      cerrar();
+      var win = global.open(url, '_blank');
+      if (!win) return U.toast('El navegador ha bloqueado la ventana. Prueba con «Descargar PDF».');
+      // algunos navegadores no dejan imprimir hasta que el PDF ha cargado
+      try { win.addEventListener('load', function () { win.print(); }); } catch (err) { /* da igual */ }
+    });
+
+    el('print-download').addEventListener('click', function () {
+      var url = printUrl();
+      cerrar();
+      var a = document.createElement('a');
+      a.href = url + '&download=1';
+      a.download = '';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    });
   }
 
   /* ── Tarifas de proveedor ────────────────────────────────── */

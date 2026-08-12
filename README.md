@@ -194,6 +194,36 @@ resguardo… Se guardan en el servidor junto a la ficha, en `/var/lib/taller/fil
 > quieres es que las páginas del M360 salgan pegadas al final del presupuesto en un único
 > fichero, se puede intentar, pero haría falta un informe de verdad para probarlo.
 
+### Imprimir en papel térmico (el ticket fino de tienda)
+
+Dentro de una ficha guardada hay un botón **Imprimir**. Sale un PDF con el **ancho exacto
+del rollo** (80 o 58 mm) y el alto que haga falta, así que la impresora de recibos lo saca
+como cualquier ticket de tienda. Se instala como una impresora normal; no hay que
+configurar nada raro.
+
+Tres papeles distintos, porque en el taller no son lo mismo:
+
+| | Qué lleva | Para quién |
+|---|---|---|
+| **Resguardo de entrada** | Equipo, avería, lo que se le ha presupuestado | El cliente, al dejar el móvil |
+| **Ticket de entrega** | Lo mismo, ya pagado | El cliente, al recogerlo |
+| **Copia para el taller** | Costes de cada pieza, coste total y **beneficio** | Tú. Ésta no se la des al cliente |
+
+En fichas de compra-venta los papeles se llaman **Ficha del equipo** (para pegar en la
+bolsa mientras lo tienes) y **Ticket de venta** (para el comprador).
+
+Los presupuestos también se imprimen así, con el botón **Ticket** que hay junto a **PDF**:
+ese sí lleva el desglose completo con base, descuento, IVA y total.
+
+> **En el diálogo de imprimir**: escala **100 %** y márgenes «ninguno». Si lo dejas en
+> «ajustar a la página» sale encogido y descuadrado — es el fallo típico con estas
+> impresoras.
+
+Un detalle pensado a propósito: en el papel del cliente salen las piezas **sin importes**,
+sólo la lista de lo que se ha cambiado. Lo que hay apuntado en cada pieza de una ficha es
+lo que te cuesta **a ti**, no lo que le cobras, y no tiene sentido enseñarle tu margen. Si
+quieres darle el desglose con precios de venta, para eso está el presupuesto.
+
 ### Tarifas de proveedor (el precio se pone solo)
 
 Carga la lista de precios de tu proveedor y, al apuntar una pieza, sale el nombre y el

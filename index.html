@@ -471,6 +471,8 @@
 
   <footer class="drawer-foot">
     <button class="btn btn-danger-ghost" id="delete-ticket" type="button" hidden>Borrar</button>
+    <button class="btn" id="ticket-print" type="button" hidden
+            title="Imprimir el ticket en la impresora de papel térmico">Imprimir</button>
     <button class="btn" id="ticket-quote" type="button" title="Sacar un presupuesto de esta ficha">Presupuesto</button>
     <span class="spacer"></span>
     <button class="btn" id="cancel-ticket" type="button">Cancelar</button>
@@ -660,10 +662,63 @@
     <button class="btn btn-danger-ghost" id="quote-delete" type="button" hidden>Borrar</button>
     <span class="spacer"></span>
     <button class="btn" id="quote-cancel" type="button">Cancelar</button>
+    <button class="btn" id="quote-ticket" type="button"
+            title="Imprimirlo en la impresora de papel térmico">Ticket</button>
     <button class="btn" id="quote-pdf" type="button">PDF</button>
     <button class="btn btn-primary" id="quote-save" type="button">Guardar</button>
   </footer>
 </aside>
+
+<!-- ─────────────── IMPRIMIR EN PAPEL TÉRMICO ─────────────── -->
+<div id="print-modal" class="modal" hidden>
+  <div class="modal-card">
+    <header class="card-head">
+      <h2>Imprimir ticket</h2>
+      <button class="icon-btn" id="print-close" aria-label="Cerrar">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.4 5 5 6.4 10.6 12 5 17.6 6.4 19 12 13.4 17.6 19 19 17.6 13.4 12 19 6.4 17.6 5 12 10.6 6.4 5Z"/></svg>
+      </button>
+    </header>
+
+    <div class="modal-body">
+      <fieldset class="print-group">
+        <legend>Qué imprimir</legend>
+        <label class="print-opt">
+          <input type="radio" name="print-kind" value="resguardo" checked>
+          <span><b id="print-kind1">Resguardo de entrada</b><small id="print-kind1-sub">Lo que se le da al cliente cuando deja el equipo</small></span>
+        </label>
+        <label class="print-opt">
+          <input type="radio" name="print-kind" value="entrega">
+          <span><b id="print-kind2">Ticket de entrega</b><small id="print-kind2-sub">Al recogerlo y pagar</small></span>
+        </label>
+        <label class="print-opt">
+          <input type="radio" name="print-kind" value="taller">
+          <span><b>Copia para el taller</b><small>Con lo que te cuesta y lo que ganas. Ésta no se la des al cliente</small></span>
+        </label>
+      </fieldset>
+
+      <fieldset class="print-group">
+        <legend>Ancho del rollo</legend>
+        <label class="print-opt">
+          <input type="radio" name="print-width" value="80" checked>
+          <span><b>80 mm</b><small>Lo normal en las impresoras de tienda</small></span>
+        </label>
+        <label class="print-opt">
+          <input type="radio" name="print-width" value="58">
+          <span><b>58 mm</b><small>El rollo estrecho, el de los datáfonos</small></span>
+        </label>
+      </fieldset>
+
+      <p class="hint">En el diálogo de imprimir pon <b>escala 100 %</b> y márgenes «ninguno».
+        Si lo dejas en «ajustar a la página» sale encogido y descuadrado.</p>
+    </div>
+
+    <footer class="modal-foot">
+      <button class="btn" id="print-cancel" type="button">Cancelar</button>
+      <button class="btn" id="print-download" type="button">Descargar PDF</button>
+      <button class="btn btn-primary" id="print-go" type="button">Imprimir</button>
+    </footer>
+  </div>
+</div>
 
 <!-- ─────────────── ELEGIR PIEZA DE LA TARIFA ─────────────── -->
 <div id="catalog-backdrop" class="backdrop" hidden></div>

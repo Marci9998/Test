@@ -90,17 +90,22 @@ def wrap(text, width, size, bold=False):
 class Pdf:
     """Un PDF de varias páginas con lo justo: texto, líneas y recuadros."""
 
-    def __init__(self, title='Documento'):
+    def __init__(self, title='Documento', width=PAGE_W, height=PAGE_H, margin=MARGIN):
+        """Por defecto un A4. Los tickets de papel térmico pasan su ancho
+        de rollo y el alto que les haya salido."""
         self.pages = []
         self.parts = []
         self.title = title
+        self.width = width
+        self.height = height
+        self.margin = margin
         self.new_page()
 
     def new_page(self):
         if self.parts:
             self.pages.append(''.join(self.parts))
         self.parts = []
-        self.y = PAGE_H - MARGIN
+        self.y = self.height - self.margin
 
     # — dibujo —
 
@@ -173,7 +178,7 @@ class Pdf:
                 '<< /Type /Page /Parent %d 0 R /MediaBox [0 0 %.2f %.2f] '
                 '/Resources << /Font << /F1 %d 0 R /F2 %d 0 R >> >> '
                 '/Contents %d 0 R >>'
-                % (pages_id, PAGE_W, PAGE_H, font_regular, font_bold, stream_id)))
+                % (pages_id, self.width, self.height, font_regular, font_bold, stream_id)))
 
         kids = ' '.join('%d 0 R' % pid for pid in page_ids)
         add('<< /Type /Pages /Kids [%s] /Count %d >>' % (kids, len(page_ids)))
