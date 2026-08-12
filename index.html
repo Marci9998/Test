@@ -111,6 +111,7 @@
 <nav class="tabs" role="tablist">
   <button class="tab is-active" role="tab" data-view="panel">Panel</button>
   <button class="tab" role="tab" data-view="fichas">Fichas</button>
+  <button class="tab" role="tab" data-view="lotes">Lotes</button>
   <button class="tab" role="tab" data-view="presupuestos">Presupuestos</button>
   <button class="tab" role="tab" data-view="datos">Datos</button>
 </nav>
@@ -164,6 +165,20 @@
 
     <div id="list" class="list"></div>
     <p id="empty" class="empty" hidden></p>
+  </section>
+
+  <!-- ─────────────── LOTES ─────────────── -->
+  <section id="view-lotes" class="view">
+    <div class="filters">
+      <p class="hint" style="flex:1;margin:0">
+        Cuando compras varios móviles de golpe por un precio: apuntas lo que pagaste por todo
+        y se reparte entre los móviles del lote, para saber lo que ganas con cada uno.
+      </p>
+      <button class="btn btn-primary" id="batch-new">+ Nuevo lote</button>
+    </div>
+
+    <div id="batch-list" class="list"></div>
+    <p id="batch-empty" class="empty" hidden></p>
   </section>
 
   <!-- ─────────────── PRESUPUESTOS ─────────────── -->
@@ -463,6 +478,66 @@
   </div>
 </div>
 
+<!-- ─────────────── LOTE (panel lateral) ─────────────── -->
+<div id="batch-backdrop" class="backdrop" hidden></div>
+<aside id="batch-drawer" class="drawer" hidden aria-label="Lote de compra">
+  <header class="drawer-head">
+    <h2 id="batch-title">Nuevo lote</h2>
+    <button class="icon-btn" id="batch-close" aria-label="Cerrar">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.4 5 5 6.4 10.6 12 5 17.6 6.4 19 12 13.4 17.6 19 19 17.6 13.4 12 19 6.4 17.6 5 12 10.6 6.4 5Z"/></svg>
+    </button>
+  </header>
+
+  <form id="batch-form" class="drawer-body">
+    <fieldset>
+      <legend>La compra</legend>
+      <div class="grid-2">
+        <label>Número
+          <input name="number" placeholder="2026-01">
+        </label>
+        <label>Fecha
+          <input name="date" type="date">
+        </label>
+        <label class="col-2">A quién se lo compraste
+          <input name="supplier" placeholder="Juan, mercadillo, subasta…">
+        </label>
+        <label>Precio del lote (€)
+          <input name="totalCost" type="text" inputmode="decimal" placeholder="400">
+        </label>
+        <label>Gastos (€)
+          <input name="extraCost" type="text" inputmode="decimal" placeholder="transporte…">
+        </label>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Móviles del lote</legend>
+      <div id="batch-units" class="bunits"></div>
+
+      <div class="batch-actions">
+        <input id="batch-new-count" type="text" inputmode="numeric" placeholder="cuántos"
+               aria-label="Cuántos móviles añadir">
+        <button type="button" class="btn" id="batch-add">+ Añadir móviles</button>
+        <button type="button" class="btn" id="batch-split">Repartir a partes iguales</button>
+      </div>
+
+      <div class="summary" id="batch-summary"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Notas</legend>
+      <textarea name="notes" rows="2" placeholder="De dónde salió, qué estado traían…"></textarea>
+    </fieldset>
+  </form>
+
+  <footer class="drawer-foot">
+    <button class="btn btn-danger-ghost" id="batch-delete" type="button" hidden>Borrar</button>
+    <span class="spacer"></span>
+    <button class="btn" id="batch-cancel" type="button">Cancelar</button>
+    <button class="btn btn-primary" id="batch-save" type="button">Guardar</button>
+  </footer>
+</aside>
+
 <!-- ─────────────── PRESUPUESTO (panel lateral) ─────────────── -->
 <div id="quote-backdrop" class="backdrop" hidden></div>
 <aside id="quote-drawer" class="drawer" hidden aria-label="Presupuesto">
@@ -688,6 +763,7 @@
 <script src="assets/shop.js"></script>
 <script src="assets/ui.js"></script>
 <script src="assets/quotes.js"></script>
+<script src="assets/batches.js"></script>
 <script src="assets/app.js"></script>
 </body>
 </html>

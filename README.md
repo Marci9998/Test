@@ -194,6 +194,34 @@ resguardo… Se guardan en el servidor junto a la ficha, en `/var/lib/taller/fil
 > quieres es que las páginas del M360 salgan pegadas al final del presupuesto en un único
 > fichero, se puede intentar, pero haría falta un informe de verdad para probarlo.
 
+### Lotes de móviles comprados
+
+Pestaña **Lotes**: cuando compras un paquete de móviles por un precio conjunto (400 € por
+seis terminales, más 20 € del transporte), aquí se reparte ese dinero entre los móviles para
+que cada ficha sepa lo que te costó de verdad y el beneficio salga bien.
+
+Cómo va:
+
+1. **Nuevo lote** → quién te lo vendió, la fecha, lo que pagaste por todo y los gastos
+   aparte (transporte, comisiones…).
+2. **Añadir móviles**: pones cuántos venían y se crean esas fichas de golpe, ya enlazadas
+   al lote y con su parte del coste puesta.
+3. El reparto sale **a partes iguales**, pero se cambia a mano en la propia lista — un
+   iPhone del lote no «cuesta» lo mismo que un Alcatel. El botón **Repartir a partes
+   iguales** vuelve a dejarlo plano cuando quieras.
+4. Si lo repartido no cuadra con lo pagado, te lo avisa: *«sin repartir −75,00 €»*.
+
+Cada parte se guarda como el **precio de compra** de su ficha, así que el panel, el margen y
+los números de siempre siguen funcionando igual, sin nada especial. En la ficha lo verás
+como *Compra (su parte del lote 2026-01)*.
+
+La tarjeta del lote te dice en todo momento cuántos llevas vendidos, cuánto has recuperado y
+el beneficio, y cambia de **Por recuperar** a **Recuperado** en cuanto lo vendido supera lo
+que pagaste.
+
+> Borrar un lote **no borra los móviles**: se quedan como fichas sueltas con su precio de
+> compra, sólo pierden el enlace al lote.
+
 ### Presupuestos y PDF
 
 Pestaña **Presupuestos**: papeles para dar al cliente, con su numeración por año

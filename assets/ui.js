@@ -163,6 +163,11 @@
     if (t.type === 'cliente' && t.customerName) tags.push('👤 ' + t.customerName);
     if ((t.parts || []).length) tags.push((t.parts.length) + ' pieza' + (t.parts.length > 1 ? 's' : ''));
 
+    if (t.batchId && S.batch) {
+      var lote = S.batch(t.batchId);
+      if (lote) tags.push('📦 lote ' + lote.number);
+    }
+
     var files = S.filesOf ? S.filesOf(t.id) : { total: 0, report: false };
     if (files.report) tags.push('📄 diagnóstico');
     else if (files.total) tags.push('📎 ' + files.total);
@@ -200,7 +205,12 @@
     var c = S.calc(t);
     var rows = [];
 
-    if (t.type !== 'cliente') rows.push(['Compra del equipo', S.money(t.purchaseCost)]);
+    if (t.type !== 'cliente') {
+      var lote = t.batchId && S.batch ? S.batch(t.batchId) : null;
+      rows.push([lote ? 'Compra <small>(su parte del lote ' + esc(lote.number) + ')</small>'
+                      : 'Compra del equipo',
+                 S.money(t.purchaseCost)]);
+    }
     rows.push(['Piezas', S.money(c.parts)]);
     if (S.num(t.extraCost)) rows.push(['Otros gastos', S.money(t.extraCost)]);
     rows.push(['<strong>Coste total</strong>', S.money(c.cost)]);

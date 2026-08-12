@@ -5,7 +5,7 @@
   'use strict';
 
   var S = global.Store, C = global.CSV, U = global.UI, Shop = global.Shop,
-      Quotes = global.Quotes;
+      Quotes = global.Quotes, Batches = global.Batches;
   var el = U.el;
 
   var filter = { status: 'todos', query: '', sort: 'updated' };
@@ -38,6 +38,7 @@
     U.renderProfiles();
     U.renderStorageInfo();      // los textos nombran al perfil abierto
     Quotes.render();
+    Batches.render();
   }
 
   /* Texto que se manda al buscador de repuestos: modelo + pieza */
@@ -49,7 +50,7 @@
 
   /* ── Navegación por pestañas ─────────────────────────────── */
   function showView(name) {
-    ['panel', 'fichas', 'presupuestos', 'datos'].forEach(function (v) {
+    ['panel', 'fichas', 'lotes', 'presupuestos', 'datos'].forEach(function (v) {
       el('view-' + v).classList.toggle('is-active', v === name);
     });
     Array.prototype.forEach.call(document.querySelectorAll('.tab'), function (tab) {
@@ -684,6 +685,7 @@
         else if (!el('profile-modal').hidden) closeProfileModal();
         else if (!el('account-modal').hidden) closeAccountModal();
         else if (Quotes.isOpen()) Quotes.close(false);
+        else if (Batches.isOpen()) Batches.close(false);
         else if (!el('drawer').hidden) closeDrawer(false);
         else if (Shop.isOpen()) Shop.close();
       }
@@ -904,7 +906,13 @@
 
   function startApp() {
     revealApp();
-    if (!wired) { wire(); Shop.init(); Quotes.init({ onChange: refresh }); wired = true; }
+    if (!wired) {
+      wire();
+      Shop.init();
+      Quotes.init({ onChange: refresh });
+      Batches.init({ onChange: refresh, openTicket: openTicket });
+      wired = true;
+    }
     refresh();
     U.renderShopSettings();
     U.renderStorageInfo();
@@ -955,6 +963,7 @@
         wire();
         Shop.init();
         Quotes.init({ onChange: refresh });
+        Batches.init({ onChange: refresh, openTicket: openTicket });
         wired = true;
         showWelcome(auth.needsSetup ? 'setup' : 'login');
         return;

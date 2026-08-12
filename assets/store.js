@@ -98,6 +98,7 @@
       salePrice: 0,
       listingUrl: '',
       notes: '',
+      batchId: '',
       createdAt: today(),
       soldAt: '',
       updatedAt: new Date().toISOString()
@@ -120,7 +121,7 @@
     });
     ['purchaseCost', 'extraCost', 'listPrice', 'salePrice'].forEach(function (k) { out[k] = num(out[k]); });
     ['brand', 'model', 'storage', 'color', 'imei', 'customerName', 'customerPhone',
-     'issue', 'listingUrl', 'notes', 'createdAt', 'soldAt'].forEach(function (k) {
+     'issue', 'listingUrl', 'notes', 'batchId', 'createdAt', 'soldAt'].forEach(function (k) {
       out[k] = out[k] == null ? '' : String(out[k]);
     });
     return out;
@@ -528,6 +529,48 @@
     return '/api/profiles/' + activeId + '/files/' + fileId;
   }
 
+  /* ── Lotes de compra ─────────────────────────────────────── */
+  var batches = [];
+  var BATCHES_KEY = 'taller.batches.v1.';
+
+  function loadBatches() {
+    if (!remote) {
+      batches = lsGet(BATCHES_KEY + activeId, []) || [];
+      return Promise.resolve(batches);
+    }
+    return api('/profiles/' + activeId + '/batches').then(function (list) {
+      batches = Array.isArray(list) ? list : [];
+      return batches;
+    }).catch(function () { batches = []; return batches; });
+  }
+
+  function saveBatchList() {
+    if (!remote) { lsSet(BATCHES_KEY + activeId, batches); return Promise.resolve(); }
+    return api('/profiles/' + activeId + '/batches', { method: 'PUT', body: batches })
+      .catch(function (err) { onError('No se pudo guardar el lote: ' + err.message); });
+  }
+
+  function allBatches() { return batches; }
+
+  function batch(id) {
+    for (var i = 0; i < batches.length; i++) if (batches[i].id === id) return batches[i];
+    return null;
+  }
+
+  function saveBatch(b) {
+    b.updatedAt = new Date().toISOString();
+    var idx = -1;
+    for (var i = 0; i < batches.length; i++) if (batches[i].id === b.id) { idx = i; break; }
+    if (idx >= 0) batches[idx] = b; else batches.unshift(b);
+    saveBatchList();
+    return b;
+  }
+
+  function removeBatch(id) {
+    batches = batches.filter(function (b) { return b.id !== id; });
+    saveBatchList();
+  }
+
   /* ── Datos del taller (los que salen en el PDF) ──────────── */
   function business() { return settings.business || {}; }
 
@@ -676,7 +719,8 @@
       var saved = prefs().profile;
       activeId = profiles.some(function (p) { return p.id === saved; }) ? saved : profiles[0].id;
       prefs({ profile: activeId });
-      return Promise.all([loadTickets(), loadQuotes(), loadSettings(), loadFileCounts()]);
+      return Promise.all([loadTickets(), loadQuotes(), loadBatches(), loadSettings(),
+                          loadFileCounts()]);
     });
   }
 
@@ -741,6 +785,11 @@
     uploadFile: uploadFile,
     deleteFile: deleteFile,
     fileUrl: fileUrl,
+
+    batches: allBatches,
+    batch: batch,
+    saveBatch: saveBatch,
+    removeBatch: removeBatch,
 
     quotes: allQuotes,
     quote: quote,

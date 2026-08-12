@@ -79,6 +79,7 @@ class Storage:
         self.profiles_path = os.path.join(self.dir, 'profiles.json')
         os.makedirs(os.path.join(self.dir, 'profiles'), exist_ok=True)
         os.makedirs(os.path.join(self.dir, 'quotes'), exist_ok=True)
+        os.makedirs(os.path.join(self.dir, 'batches'), exist_ok=True)
         os.makedirs(os.path.join(self.dir, 'backups'), exist_ok=True)
         if not os.path.exists(self.profiles_path):
             self._write_json(self.profiles_path, [])
@@ -107,6 +108,13 @@ class Storage:
 
     def _ticket_path(self, profile_id):
         return os.path.join(self.dir, 'profiles', profile_id + '.json')
+
+    def _backup_path(self, name):
+        """Ruta dentro de backups/, creando la carpeta si hiciera falta.
+        Si alguien la borra a mano no queremos quedarnos sin copias."""
+        folder = os.path.join(self.dir, 'backups')
+        os.makedirs(folder, exist_ok=True)
+        return os.path.join(folder, name)
 
     # — perfiles —
 
@@ -151,9 +159,11 @@ class Storage:
         path = self._ticket_path(profile_id)
         if os.path.exists(path):
             # no se borra del todo: se aparta por si acaso
-            shutil.move(path, os.path.join(
-                self.dir, 'backups',
-                'borrado-%s-%s.json' % (profile_id, time.strftime('%Y%m%d-%H%M%S'))))
+            try:
+                shutil.move(path, self._backup_path(
+                    'borrado-%s-%s.json' % (profile_id, time.strftime('%Y%m%d-%H%M%S'))))
+            except OSError:
+                pass
         return True
 
     # — fichas —
@@ -179,7 +189,7 @@ class Storage:
     def _rotate_backup(self, profile_id, path):
         """Deja una copia al día por perfil, y guarda las 14 últimas."""
         stamp = time.strftime('%Y%m%d')
-        target = os.path.join(self.dir, 'backups', '%s-%s.json' % (profile_id, stamp))
+        target = self._backup_path('%s-%s.json' % (profile_id, stamp))
         if not os.path.exists(target):
             try:
                 shutil.copy2(path, target)
@@ -194,6 +204,27 @@ class Storage:
                 os.remove(os.path.join(self.dir, 'backups', old))
             except OSError:
                 pass
+
+    # — lotes de compra —
+
+    def _batch_path(self, profile_id):
+        return os.path.join(self.dir, 'batches', profile_id + '.json')
+
+    def batches(self, profile_id):
+        data = self._read_json(self._batch_path(profile_id), [])
+        return data if isinstance(data, list) else []
+
+    def save_batches(self, profile_id, batches):
+        path = self._batch_path(profile_id)
+        if os.path.exists(path):
+            stamp = time.strftime('%Y%m%d')
+            target = self._backup_path('lotes-%s-%s.json' % (profile_id, stamp))
+            if not os.path.exists(target):
+                try:
+                    shutil.copy2(path, target)
+                except OSError:
+                    pass
+        self._write_json(path, batches)
 
     # — adjuntos (informes de diagnóstico, fotos…) —
 
@@ -273,8 +304,7 @@ class Storage:
         path = self._quote_path(profile_id)
         if os.path.exists(path):
             stamp = time.strftime('%Y%m%d')
-            target = os.path.join(self.dir, 'backups',
-                                  'presupuestos-%s-%s.json' % (profile_id, stamp))
+            target = self._backup_path('presupuestos-%s-%s.json' % (profile_id, stamp))
             if not os.path.exists(target):
                 try:
                     shutil.copy2(path, target)
@@ -723,6 +753,20 @@ class Handler(BaseHTTPRequestHandler):
             if method == 'DELETE':
                 self.storage.delete_file(profile_id, file_id)
                 return self._json({'ok': True})
+            return self._error(405, 'Método no permitido')
+
+        if len(parts) == 3 and parts[0] == 'profiles' and parts[2] == 'batches':
+            profile_id = safe_id(parts[1])
+            if not any(p['id'] == profile_id for p in self.storage.profiles()):
+                return self._error(404, 'No existe ese puesto')
+            if method == 'GET':
+                return self._json(self.storage.batches(profile_id))
+            if method == 'PUT':
+                batches = self._body()
+                if not isinstance(batches, list):
+                    raise ValueError('Se esperaba una lista de lotes')
+                self.storage.save_batches(profile_id, batches)
+                return self._json({'ok': True, 'count': len(batches)})
             return self._error(405, 'Método no permitido')
 
         if len(parts) == 3 and parts[0] == 'profiles' and parts[2] == 'quotes':
