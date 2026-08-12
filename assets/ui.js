@@ -314,6 +314,89 @@
     }).join('');
   }
 
+  /* ── Tarifas de proveedor ────────────────────────────────── */
+  function renderCatalogSources() {
+    var card = el('catalog-card');
+    if (!card) return;
+
+    // Sin servidor no hay dónde guardar una tarifa de miles de piezas
+    if (!S.isRemote()) {
+      card.hidden = true;
+      return;
+    }
+    card.hidden = false;
+
+    var auth = S.auth ? S.auth() : { enabled: false };
+    var owner = !auth.enabled || !auth.user || auth.user.role === 'dueño';
+    var sources = S.catalogSources();
+    var total = S.catalogPieces();
+
+    el('catalog-count').textContent = total
+      ? total.toLocaleString('es-ES') + ' piezas cargadas'
+      : 'sin tarifas todavía';
+
+    el('catalog-add').hidden = !owner;
+
+    if (!sources.length) {
+      el('catalog-sources').innerHTML = '<p class="hint" style="margin:0">' + (owner
+        ? 'Dale a <b>Añadir tarifa</b>, ponle el nombre de tu proveedor y sube su lista de precios.'
+        : 'Todavía no hay ninguna tarifa cargada. Pídeselo al dueño.') + '</p>';
+      return;
+    }
+
+    el('catalog-sources').innerHTML = sources.map(function (source) {
+      var cuando = source.updatedAt
+        ? dateLabel(source.updatedAt.slice(0, 10))
+        : 'nunca';
+
+      return '<div class="cat-source" data-source="' + esc(source.id) + '">' +
+        '<div>' +
+          '<div class="cat-source-name">' + esc(source.name) + '</div>' +
+          '<div class="cat-source-sub">' +
+            (source.count ? source.count.toLocaleString('es-ES') + ' piezas' : 'vacía') +
+            ' · actualizada ' + esc(cuando) +
+            (source.hasKey ? ' · con clave ' + esc(source.keyHint) : '') +
+          '</div>' +
+        '</div>' +
+        (owner ? '<button type="button" class="part-del" data-action="remove-source" ' +
+          'aria-label="Quitar tarifa">×</button>' : '<span></span>') +
+
+        (owner ? '<div class="cat-source-fields">' +
+          '<label>Nombre<input class="cat-name" value="' + esc(source.name) + '" ' +
+            'placeholder="Repuestos Fuente"></label>' +
+          '<label>Dirección de la API <small>(si tienes clave)</small>' +
+            '<input class="cat-url" value="' + esc(source.url) + '" ' +
+            'placeholder="https://tienda.com/api/productos"></label>' +
+          '<label>Clave' +
+            '<input class="cat-key" type="password" autocomplete="off" placeholder="' +
+            (source.hasKey ? 'guardada — escribe otra para cambiarla' : 'la que te dé la tienda') +
+            '"></label>' +
+          '<label>Cómo se manda la clave' +
+            '<select class="cat-auth">' +
+              [['ninguna', 'no hace falta'], ['bearer', 'cabecera Authorization: Bearer'],
+               ['basic', 'usuario (Basic, tipo PrestaShop)'],
+               ['cabecera', 'en una cabecera suya'], ['parametro', 'en la dirección (?clave=…)']]
+                .map(function (pair) {
+                  return '<option value="' + pair[0] + '"' +
+                    (source.auth === pair[0] ? ' selected' : '') + '>' + pair[1] + '</option>';
+                }).join('') +
+            '</select></label>' +
+          '<label class="cat-authname-box">Nombre de la cabecera o del parámetro' +
+            '<input class="cat-authname" value="' + esc(source.authName) + '" ' +
+            'placeholder="X-Api-Key"></label>' +
+        '</div>' : '') +
+
+        (owner ? '<div class="cat-source-btns">' +
+          '<button type="button" class="btn sm" data-action="save-source">Guardar</button>' +
+          '<button type="button" class="btn sm" data-action="upload-source">Subir tarifa (CSV)</button>' +
+          '<button type="button" class="btn sm" data-action="sync-source"' +
+            (source.url ? '' : ' disabled title="Pon primero la dirección de la API"') +
+            '>Actualizar desde la tienda</button>' +
+        '</div>' : '') +
+      '</div>';
+    }).join('');
+  }
+
   /* ── Dónde se guardan los datos ──────────────────────────── */
   function renderStorageInfo() {
     var remote = S.isRemote();
@@ -369,6 +452,7 @@
     renderStatusOptions: renderStatusOptions,
     renderProfiles: renderProfiles,
     renderShopSettings: renderShopSettings,
+    renderCatalogSources: renderCatalogSources,
     renderStorageInfo: renderStorageInfo,
     partRow: partRow,
     toast: toast,

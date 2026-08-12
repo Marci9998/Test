@@ -194,6 +194,44 @@ resguardo… Se guardan en el servidor junto a la ficha, en `/var/lib/taller/fil
 > quieres es que las páginas del M360 salgan pegadas al final del presupuesto en un único
 > fichero, se puede intentar, pero haría falta un informe de verdad para probarlo.
 
+### Tarifas de proveedor (el precio se pone solo)
+
+Carga la lista de precios de tu proveedor y, al apuntar una pieza, sale el nombre y el
+precio sin escribir nada. Se configura en **Datos → Tarifas de proveedor**.
+
+Dos maneras de cargarla:
+
+| | Cómo | Para quién |
+|---|---|---|
+| **Subir la tarifa** | El CSV o el Excel (guardado como CSV) que te manda el proveedor | Cualquiera. Es lo normal |
+| **Con clave (API)** | La tienda te da una dirección y una clave, y se actualiza al pulsar un botón | Sólo si tienes cuenta de profesional y te la dan |
+
+> **Ojo con lo de la API**: ni Repuestos Fuente ni Mobile Sentrix reparten claves a
+> cualquiera. Normalmente hay que tener cuenta de profesional y pedírsela a ellos. Lo que sí
+> te dan casi todos es la tarifa en CSV o Excel, y con eso funciona igual de bien.
+
+Da igual el formato (CSV con comas o con punto y coma, JSON, XML) ni cómo se llamen las
+columnas: las empareja solo, y entiende los precios escritos como sea — `12,50 €`,
+`1.234,56`, `$9.99`. También le da igual el acento: buscando *bateria* encuentra *Batería*.
+
+Cuando la clave es de una API, se manda como te pida la tienda: `Authorization: Bearer`,
+Basic (lo típico de PrestaShop), una cabecera suya, o metida en la dirección.
+
+**Cómo se usa el día a día**: dentro de una ficha, en una pieza, dale a la 🔎. Se abre una
+ventanita buscando ya tu modelo; eliges la pieza y el nombre y el precio se ponen solos.
+Lo que no tenga stock sale al final, para que no elijas algo que no te pueden servir. Si
+esa pieza no está en tu tarifa, el botón **Buscar en las tiendas ↗** te lleva al navegador
+de siempre. En los presupuestos es igual, con **+ Pieza de la tarifa**.
+
+Un par de cosas sobre las claves:
+
+- Se guardan sólo en el servidor, en `catalog/sources.json` con permisos `600`, y **no se
+  devuelven nunca al navegador**: por la API sólo salen los cuatro últimos caracteres.
+- Las tarifas las toca sólo el dueño. Un ayudante puede buscar piezas, pero no ve ni cambia
+  las claves.
+- No se pueden pedir tarifas a direcciones de tu propia red, para que nadie use el servidor
+  del taller como puerta trasera para husmear el router o las cámaras.
+
 ### Lotes de móviles comprados
 
 Pestaña **Lotes**: cuando compras un paquete de móviles por un precio conjunto (400 € por

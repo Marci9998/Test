@@ -41,6 +41,20 @@
     Batches.render();
   }
 
+  /* Mete en su fila la pieza elegida de la tarifa: nombre y precio */
+  function fillPart(partId, item) {
+    syncFromForm();
+    current.parts.forEach(function (part) {
+      if (part.id !== partId) return;
+      part.name = item.name;
+      part.unitCost = S.num(item.price);
+      if (!part.qty) part.qty = 1;
+    });
+    U.renderParts(current.parts);
+    U.renderSummary(current);
+    U.toast(item.name + ' · ' + S.money(item.price));
+  }
+
   /* Texto que se manda al buscador de repuestos: modelo + pieza */
   function searchTerms(partName) {
     if (!current) return partName || '';
@@ -500,7 +514,19 @@
       if (e.target.closest('.part-search')) {
         syncFromForm();
         var name = row.querySelector('.part-name').value;
-        Shop.open({ query: searchTerms(name) });
+        var terms = searchTerms(name);
+
+        // Con la tarifa cargada se elige la pieza y el precio se pone solo;
+        // sin ella, a la tienda como toda la vida.
+        if (Catalog.ready()) {
+          Catalog.pick({
+            query: terms,
+            onPick: function (item) { fillPart(row.dataset.part, item); },
+            onShop: function (query) { Shop.open({ query: query }); }
+          });
+        } else {
+          Shop.open({ query: terms });
+        }
         return;
       }
 
@@ -652,6 +678,9 @@
       Shop.renderSources();
       U.toast('Tiendas restauradas');
     });
+
+    /* Tarifas de proveedor */
+    wireCatalog();
 
     /* Datos */
     el('export-json').addEventListener('click', exportJSON);
@@ -901,6 +930,107 @@
     node.hidden = false;
   }
 
+  /* ── Tarifas de proveedor ────────────────────────────────── */
+  function sourceForm(row) {
+    function val(cls) {
+      var input = row.querySelector('.' + cls);
+      return input ? input.value.trim() : '';
+    }
+    var source = {
+      id: row.dataset.source,
+      name: val('cat-name') || 'Tarifa',
+      url: val('cat-url'),
+      auth: val('cat-auth') || 'ninguna',
+      authName: val('cat-authname')
+    };
+    // la clave sólo se manda si has escrito una nueva; si no, se queda la guardada
+    var key = val('cat-key');
+    if (key) source.apiKey = key;
+    return source;
+  }
+
+  function wireCatalog() {
+    var wrap = el('catalog-sources');
+    var fileInput = el('catalog-file');
+    var uploading = '';
+
+    el('catalog-add').addEventListener('click', function () {
+      S.saveCatalogSource({ name: 'Mi proveedor' }).then(function () {
+        U.renderCatalogSources();
+      }).catch(function (err) { U.toast(err.message); });
+    });
+
+    wrap.addEventListener('click', function (e) {
+      var button = e.target.closest('[data-action]');
+      if (!button) return;
+      var row = button.closest('.cat-source');
+      var id = row.dataset.source;
+      var action = button.dataset.action;
+
+      if (action === 'remove-source') {
+        if (!confirm('¿Quitar esta tarifa? Se borran sus piezas del buscador ' +
+                     '(las fichas que ya la usaron no se tocan).')) return;
+        S.removeCatalogSource(id).then(function () {
+          U.renderCatalogSources();
+          U.toast('Tarifa quitada');
+        }).catch(function (err) { U.toast(err.message); });
+        return;
+      }
+
+      if (action === 'save-source') {
+        S.saveCatalogSource(sourceForm(row)).then(function () {
+          U.renderCatalogSources();
+          U.toast('Guardado');
+        }).catch(function (err) { U.toast(err.message); });
+        return;
+      }
+
+      if (action === 'upload-source') {
+        // se guarda antes por si acaba de cambiar el nombre
+        uploading = id;
+        S.saveCatalogSource(sourceForm(row)).then(function () {
+          fileInput.value = '';
+          fileInput.click();
+        }).catch(function (err) { U.toast(err.message); });
+        return;
+      }
+
+      if (action === 'sync-source') {
+        button.disabled = true;
+        button.textContent = 'Pidiendo…';
+        S.saveCatalogSource(sourceForm(row))
+          .then(function () { return S.syncCatalogSource(id); })
+          .then(function (data) {
+            U.renderCatalogSources();
+            U.toast(data.count.toLocaleString('es-ES') + ' piezas cargadas');
+          })
+          .catch(function (err) {
+            U.renderCatalogSources();
+            alert('No se ha podido traer la tarifa.\n\n' + err.message);
+          });
+      }
+    });
+
+    fileInput.addEventListener('change', function () {
+      var file = fileInput.files && fileInput.files[0];
+      if (!file || !uploading) return;
+      U.toast('Leyendo ' + file.name + '…');
+      S.importCatalogFile(uploading, file).then(function (data) {
+        U.renderCatalogSources();
+        var columnas = Object.keys(data.map || {}).map(function (k) {
+          return k + ' ← ' + data.map[k];
+        }).join('\n');
+        U.toast(data.count.toLocaleString('es-ES') + ' piezas cargadas');
+        if (data.sample && data.sample.length) {
+          console.log('Ejemplo de lo leído:', data.sample);
+        }
+        if (columnas) console.log('Columnas emparejadas:\n' + columnas);
+      }).catch(function (err) {
+        alert('No he podido leer esa tarifa.\n\n' + err.message);
+      }).then(function () { uploading = ''; });
+    });
+  }
+
   /* ── Arranque ────────────────────────────────────────────── */
   var wired = false;
 
@@ -909,12 +1039,14 @@
     if (!wired) {
       wire();
       Shop.init();
+      Catalog.init();
       Quotes.init({ onChange: refresh });
       Batches.init({ onChange: refresh, openTicket: openTicket });
       wired = true;
     }
     refresh();
     U.renderShopSettings();
+    U.renderCatalogSources();
     U.renderStorageInfo();
     renderAccount();
 
@@ -962,6 +1094,7 @@
         // sin haber entrado no se enseña nada de dentro
         wire();
         Shop.init();
+        Catalog.init();
         Quotes.init({ onChange: refresh });
         Batches.init({ onChange: refresh, openTicket: openTicket });
         wired = true;

@@ -111,7 +111,11 @@ install_files() {
   mkdir -p "$APP_DIR"
   # se borra sólo lo de la aplicación; los datos viven en otra carpeta
   rm -rf "${APP_DIR:?}/assets"
-  cp -a "$src/server.py" "$src/index.html" "$APP_DIR/"
+  # todos los módulos de Python, no sólo el servidor: los PDF los monta
+  # quotepdf.py y el catálogo catalog.py, y sin ellos la web arranca pero
+  # falla justo en el botón
+  cp -a "$src"/*.py "$APP_DIR/"
+  cp -a "$src/index.html" "$APP_DIR/"
   cp -a "$src/assets" "$APP_DIR/"
 
   # lo que hace falta para añadirla a la pantalla de inicio del móvil

@@ -193,6 +193,7 @@
     renderTotals();
 
     el('quote-title').textContent = quote ? 'Presupuesto ' + current.number : 'Nuevo presupuesto';
+    el('quote-from-catalog').hidden = !global.Catalog.ready();
     el('quote-delete').hidden = !quote;
     el('quote-drawer').hidden = false;
     el('quote-backdrop').hidden = false;
@@ -380,6 +381,28 @@
       renderTotals();
       var inputs = el('quote-lines').querySelectorAll('.qline-concept');
       if (inputs.length) inputs[inputs.length - 1].focus();
+    });
+
+    /* Una línea sacada de la tarifa del proveedor, con su precio puesto */
+    el('quote-from-catalog').addEventListener('click', function () {
+      sync();
+      global.Catalog.pick({
+        title: 'Añadir pieza al presupuesto',
+        query: [(current.device || {}).brand, (current.device || {}).model]
+          .filter(Boolean).join(' '),
+        onPick: function (item) {
+          current.lines.push({
+            id: S.uid(),
+            concept: item.name,
+            note: item.ref ? 'Ref. ' + item.ref : '',
+            qty: 1,
+            unitPrice: S.num(item.price)
+          });
+          renderLines();
+          renderTotals();
+          U.toast(item.name + ' · ' + S.money(item.price));
+        }
+      });
     });
 
     el('quote-lines').addEventListener('click', function (e) {

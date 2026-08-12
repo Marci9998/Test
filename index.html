@@ -288,6 +288,27 @@
       </div>
     </article>
 
+    <article class="card" id="catalog-card">
+      <header class="card-head">
+        <h2>Tarifas de proveedor</h2>
+        <small id="catalog-count"></small>
+      </header>
+      <p class="hint">
+        Carga aquí la lista de precios de tu proveedor y, al apuntar una pieza en una ficha o en un
+        presupuesto, el nombre y el precio salen solos. Dos maneras:<br>
+        <b>Subir la tarifa</b> — el CSV o el Excel (guardado como CSV) que te manda el proveedor.
+        Esto lo tiene cualquiera y es lo más rápido.<br>
+        <b>Con clave (API)</b> — si la tienda te da una dirección y una clave, se actualiza sola al
+        darle al botón. Ojo: casi ninguna tienda de repuestos reparte claves; hay que tener cuenta
+        de profesional y pedírsela a ellos.
+      </p>
+      <div id="catalog-sources" class="cat-sources"></div>
+      <div class="row-btns" style="margin-top:12px">
+        <button class="btn" id="catalog-add">+ Añadir tarifa</button>
+      </div>
+      <input type="file" id="catalog-file" accept=".csv,.txt,.json,.xml,.tsv,text/csv,application/json,text/xml" hidden>
+    </article>
+
     <div class="panel-grid">
       <article class="card">
         <header class="card-head">
@@ -612,7 +633,10 @@
     <fieldset>
       <legend>Qué se le cobra</legend>
       <div id="quote-lines" class="qlines"></div>
-      <button type="button" class="btn btn-ghost" id="quote-add-line">+ Añadir línea</button>
+      <div class="row-btns">
+        <button type="button" class="btn btn-ghost" id="quote-add-line">+ Añadir línea</button>
+        <button type="button" class="btn btn-ghost" id="quote-from-catalog" hidden>+ Pieza de la tarifa</button>
+      </div>
 
       <div class="grid-2" style="margin-top:14px">
         <label>Descuento (€)
@@ -640,6 +664,28 @@
     <button class="btn btn-primary" id="quote-save" type="button">Guardar</button>
   </footer>
 </aside>
+
+<!-- ─────────────── ELEGIR PIEZA DE LA TARIFA ─────────────── -->
+<div id="catalog-backdrop" class="backdrop" hidden></div>
+<section id="catalog-picker" class="picker" hidden role="dialog" aria-modal="true"
+         aria-labelledby="catalog-picker-title">
+  <header class="picker-head">
+    <h2 id="catalog-picker-title">Elegir pieza de la tarifa</h2>
+    <button class="icon-btn" id="catalog-close" aria-label="Cerrar">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.4 5 5 6.4 10.6 12 5 17.6 6.4 19 12 13.4 17.6 19 19 17.6 13.4 12 19 6.4 17.6 5 12 10.6 6.4 5Z"/></svg>
+    </button>
+  </header>
+  <div class="picker-bar">
+    <input id="catalog-query" type="search" autocomplete="off"
+           placeholder="iphone 11 pantalla…" aria-label="Buscar en la tarifa">
+  </div>
+  <p class="hint" id="catalog-hint"></p>
+  <div id="catalog-results" class="cat-results"></div>
+  <footer class="picker-foot">
+    <small id="catalog-foot-note"></small>
+    <button class="btn sm" id="catalog-to-shop" type="button">Buscar en las tiendas ↗</button>
+  </footer>
+</section>
 
 <!-- ─────────────── MINI NAVEGADOR DE REPUESTOS ─────────────── -->
 <section id="shop" class="shop" hidden aria-label="Buscador de repuestos">
@@ -761,6 +807,7 @@
 <script src="assets/store.js"></script>
 <script src="assets/csv.js"></script>
 <script src="assets/shop.js"></script>
+<script src="assets/catalog.js"></script>
 <script src="assets/ui.js"></script>
 <script src="assets/quotes.js"></script>
 <script src="assets/batches.js"></script>

@@ -32,7 +32,9 @@ import urllib.request
 import uuid
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlparse, unquote, parse_qs, urljoin
+from urllib.parse import urlparse, unquote, parse_qs, urljoin, urlencode
+
+import catalog
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_PORT = 8477          # 8083 lo deja libre a propósito (lo usan otros paneles)
@@ -43,6 +45,8 @@ PROFILE_KINDS = ('moviles', 'pcs', 'otro')
 FORBIDDEN_PORTS = {8083}
 MAX_BODY = 8 * 1024 * 1024   # 8 MB de fichas es muchísimo; corta ahí
 MAX_UPLOAD = 25 * 1024 * 1024   # los informes de diagnóstico y las fotos sí pesan
+MAX_FEED = 40 * 1024 * 1024     # una tarifa de proveedor no pasa de aquí
+FEED_TIMEOUT = 60               # las tarifas gordas tardan lo suyo
 
 ALLOWED_FILE_TYPES = {'.pdf', '.png', '.jpg', '.jpeg', '.webp', '.heic'}
 FILE_TYPES = {
@@ -317,6 +321,73 @@ class Storage:
             if item.get('id') == quote_id:
                 return item
         return None
+
+    # — catálogo de piezas —
+    #
+    # La tarifa del proveedor es la misma para todo el taller, así que el
+    # catálogo no va por puesto: se comparte. Las claves de las tiendas se
+    # guardan aparte y no salen nunca hacia el navegador.
+
+    def _catalog_dir(self):
+        folder = os.path.join(self.dir, 'catalog')
+        os.makedirs(folder, exist_ok=True)
+        return folder
+
+    def catalog_sources(self):
+        data = self._read_json(os.path.join(self._catalog_dir(), 'sources.json'), [])
+        return data if isinstance(data, list) else []
+
+    def save_catalog_sources(self, sources):
+        path = os.path.join(self._catalog_dir(), 'sources.json')
+        self._write_json(path, sources)
+        try:
+            os.chmod(path, 0o600)          # aquí dentro van las claves de las tiendas
+        except OSError:
+            pass
+
+    def catalog_source(self, source_id):
+        for source in self.catalog_sources():
+            if source.get('id') == source_id:
+                return source
+        return None
+
+    def save_catalog_source(self, source):
+        sources = self.catalog_sources()
+        for i, existing in enumerate(sources):
+            if existing.get('id') == source.get('id'):
+                sources[i] = source
+                break
+        else:
+            sources.append(source)
+        self.save_catalog_sources(sources)
+        return source
+
+    def delete_catalog_source(self, source_id):
+        sources = self.catalog_sources()
+        rest = [s for s in sources if s.get('id') != source_id]
+        if len(rest) == len(sources):
+            return False
+        self.save_catalog_sources(rest)
+        try:
+            os.remove(os.path.join(self._catalog_dir(), 'items-%s.json' % source_id))
+        except OSError:
+            pass
+        return True
+
+    def catalog_items(self, source_id):
+        data = self._read_json(
+            os.path.join(self._catalog_dir(), 'items-%s.json' % source_id), [])
+        return data if isinstance(data, list) else []
+
+    def save_catalog_items(self, source_id, items):
+        self._write_json(
+            os.path.join(self._catalog_dir(), 'items-%s.json' % source_id), items)
+
+    def all_catalog_items(self):
+        items = []
+        for source in self.catalog_sources():
+            items.extend(self.catalog_items(source.get('id') or ''))
+        return items
 
     # — cuentas y sesiones —
 
@@ -811,6 +882,82 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, data, 'application/pdf',
                               {'Content-Disposition': 'attachment; filename="%s"' % name})
 
+        # — catálogo de piezas del proveedor —
+
+        if parts == ['catalog'] and method == 'GET':
+            params = parse_qs(urlparse(self.path).query)
+            query = (params.get('q') or [''])[0]
+            try:
+                limit = min(80, max(1, int((params.get('limit') or ['30'])[0])))
+            except ValueError:
+                limit = 30
+            found = catalog.search(self.storage.all_catalog_items(), query, limit)
+            return self._json({'items': found, 'total': len(found)})
+
+        if parts == ['catalog', 'sources']:
+            if method == 'GET':
+                return self._json([public_source(s, len(self.storage.catalog_items(
+                    s.get('id') or ''))) for s in self.storage.catalog_sources()])
+            if method == 'POST':
+                denied = self._owner_only()
+                if denied:
+                    return denied
+                return self._json(self._save_source(self._body() or {}), 201)
+            return self._error(405, 'Método no permitido')
+
+        if len(parts) == 3 and parts[:2] == ['catalog', 'sources']:
+            if method == 'DELETE':
+                denied = self._owner_only()
+                if denied:
+                    return denied
+                ok = self.storage.delete_catalog_source(safe_id(parts[2]))
+                return self._json({'ok': True}) if ok else self._error(404, 'No existe esa tarifa')
+            if method == 'PATCH':
+                denied = self._owner_only()
+                if denied:
+                    return denied
+                body = self._body() or {}
+                body['id'] = safe_id(parts[2])
+                return self._json(self._save_source(body))
+            return self._error(405, 'Método no permitido')
+
+        # traerse la tarifa de la tienda con su clave
+        if len(parts) == 4 and parts[:2] == ['catalog', 'sources'] \
+                and parts[3] == 'sync' and method == 'POST':
+            denied = self._owner_only()
+            if denied:
+                return denied
+            source = self.storage.catalog_source(safe_id(parts[2]))
+            if not source:
+                return self._error(404, 'No existe esa tarifa')
+            try:
+                raw, content_type = fetch_feed(source)
+            except ValueError as err:
+                return self._error(400, str(err))
+            except urllib.error.HTTPError as err:
+                return self._error(400, 'La tienda ha contestado %s. %s'
+                                   % (err.code, http_hint(err.code)))
+            except (urllib.error.URLError, OSError, socket.timeout) as err:
+                return self._error(400, 'No se ha podido conectar: %s' % err)
+            return self._json(self._ingest(source, raw, content_type))
+
+        # subir el fichero de tarifa a mano
+        if len(parts) == 4 and parts[:2] == ['catalog', 'sources'] \
+                and parts[3] == 'import' and method == 'POST':
+            denied = self._owner_only()
+            if denied:
+                return denied
+            source = self.storage.catalog_source(safe_id(parts[2]))
+            if not source:
+                return self._error(404, 'No existe esa tarifa')
+            length = int(self.headers.get('Content-Length') or 0)
+            if length <= 0:
+                raise ValueError('No ha llegado el fichero.')
+            if length > MAX_FEED:
+                raise ValueError('El fichero pasa de %d MB.' % (MAX_FEED // (1024 * 1024)))
+            return self._json(self._ingest(source, self.rfile.read(length),
+                                           self.headers.get('Content-Type') or ''))
+
         if parts == ['settings']:
             if method == 'GET':
                 return self._json(self.storage.settings())
@@ -823,6 +970,69 @@ class Handler(BaseHTTPRequestHandler):
             return self._error(405, 'Método no permitido')
 
         return self._error(404, 'Ruta desconocida')
+
+    # — ayudas del catálogo —
+
+    def _owner_only(self):
+        """Las tarifas y sus claves las toca sólo el dueño."""
+        user = self.current_user()
+        if self.storage.users() and (not user or user.get('role') != 'dueño'):
+            return self._error(403, 'Sólo el dueño puede tocar las tarifas.')
+        return None
+
+    def _save_source(self, body):
+        """Guarda una tarifa. La clave sólo se cambia si mandan una nueva."""
+        raw_id = str(body.get('id') or '').strip()
+        source_id = safe_id(raw_id) if raw_id else uuid.uuid4().hex[:12]
+        previous = self.storage.catalog_source(source_id) or {}
+
+        url = str(body.get('url') or '').strip()
+        if url:
+            check_feed_url(url)             # revienta si no vale, y así el usuario se entera
+
+        source = {
+            'id': source_id,
+            'name': str(body.get('name') or previous.get('name') or 'Tarifa')[:60],
+            'url': url or previous.get('url', ''),
+            'auth': str(body.get('auth') or previous.get('auth') or 'ninguna'),
+            'authName': str(body.get('authName') or previous.get('authName') or '')[:60],
+            'map': body.get('map') if isinstance(body.get('map'), dict)
+                   else previous.get('map') or {},
+            'updatedAt': previous.get('updatedAt', ''),
+        }
+
+        key = body.get('apiKey')
+        if key is None:
+            source['apiKey'] = previous.get('apiKey', '')
+        else:
+            source['apiKey'] = str(key).strip()[:400]
+
+        self.storage.save_catalog_source(source)
+        return public_source(source, len(self.storage.catalog_items(source_id)))
+
+    def _ingest(self, source, raw, content_type):
+        """Convierte lo descargado o subido en piezas y lo deja guardado."""
+        rows, columns = catalog.parse(raw, content_type)
+        if not rows:
+            raise ValueError('No he encontrado ninguna fila ahí dentro. '
+                             'Comprueba que es un CSV, un JSON o un XML de productos.')
+
+        items, mapping = catalog.build_items(rows, columns, source.get('map'),
+                                             source.get('id'), source.get('name'))
+        if not items:
+            raise ValueError('He leído %d filas pero ninguna trae nombre de producto. '
+                             'Repasa las columnas.' % len(rows))
+
+        self.storage.save_catalog_items(source['id'], items)
+        source = dict(source)
+        source['map'] = mapping
+        source['updatedAt'] = time.strftime('%Y-%m-%dT%H:%M:%S')
+        self.storage.save_catalog_source(source)
+
+        return {'ok': True, 'count': len(items), 'rows': len(rows),
+                'columns': columns[:40], 'map': mapping,
+                'source': public_source(source, len(items)),
+                'sample': items[:5]}
 
     # — proxy de tiendas —
 
@@ -1007,6 +1217,84 @@ def allowed_hosts(settings):
         if len(parts) >= 2:
             domains.add('.'.join(parts[-2:]))
     return domains, exact
+
+
+def public_source(source, count=0):
+    """La tarifa tal y como la ve el navegador: sin la clave."""
+    key = str((source or {}).get('apiKey') or '')
+    return {
+        'id': source.get('id', ''),
+        'name': source.get('name', ''),
+        'url': source.get('url', ''),
+        'auth': source.get('auth', 'ninguna'),
+        'authName': source.get('authName', ''),
+        'map': source.get('map') or {},
+        'updatedAt': source.get('updatedAt', ''),
+        'count': count,
+        'hasKey': bool(key),
+        # sólo el rabito, para reconocerla sin enseñarla entera
+        'keyHint': ('…' + key[-4:]) if len(key) > 4 else ('•' * len(key)),
+    }
+
+
+def check_feed_url(url):
+    """La dirección de una tarifa: sólo http/https y nada de la red de casa.
+
+    Sin esto, el dueño podría hacer que el servidor pidiera cosas a
+    aparatos de la red interna (el router, una cámara…) y leer la respuesta.
+    """
+    url = (url or '').strip()
+    parsed = urlparse(url)
+    if parsed.scheme not in ('http', 'https'):
+        raise ValueError('La dirección tiene que empezar por http:// o https://')
+    host = parsed.hostname or ''
+    if not host:
+        raise ValueError('Esa dirección no vale.')
+    if PRIVATE_HOST.match(host):
+        raise ValueError('No se pueden pedir tarifas a direcciones de tu propia red. '
+                         'Si tienes el fichero a mano, súbelo con «Subir tarifa».')
+    return url
+
+
+def http_hint(code):
+    """Traducción de los códigos que más salen al probar una clave."""
+    return {
+        401: 'La clave no vale o falta.',
+        403: 'La tienda no te deja entrar ahí con esa clave.',
+        404: 'Esa dirección no existe en la tienda.',
+        429: 'Te ha cortado por pedir demasiado. Prueba dentro de un rato.',
+    }.get(code, 'Mira la dirección y la clave.')
+
+
+def fetch_feed(source):
+    """Se trae la tarifa de la tienda, poniendo la clave donde toque."""
+    url = check_feed_url(source.get('url') or '')
+    key = str(source.get('apiKey') or '')
+    auth = source.get('auth') or 'ninguna'
+    name = (source.get('authName') or '').strip()
+    headers = {'User-Agent': 'Taller/1.0', 'Accept': 'application/json, text/csv, */*'}
+
+    if key:
+        if auth == 'bearer':
+            headers['Authorization'] = 'Bearer ' + key
+        elif auth == 'basic':
+            # PrestaShop y otras piden la clave como usuario, sin contraseña
+            headers['Authorization'] = 'Basic ' + base64.b64encode(
+                (key + ':').encode('utf-8')).decode('ascii')
+        elif auth == 'cabecera':
+            headers[name or 'X-Api-Key'] = key
+        elif auth == 'parametro':
+            separator = '&' if urlparse(url).query else '?'
+            url = url + separator + urlencode({name or 'api_key': key})
+
+    request = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(request, timeout=FEED_TIMEOUT) as response:
+        raw = response.read(MAX_FEED + 1)
+        if len(raw) > MAX_FEED:
+            raise ValueError('La tarifa pasa de %d MB.' % (MAX_FEED // (1024 * 1024)))
+        if response.headers.get('Content-Encoding') == 'gzip':
+            raw = gzip.decompress(raw)
+        return raw, response.headers.get('Content-Type') or ''
 
 
 def check_target(url, settings):

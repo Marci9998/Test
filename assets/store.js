@@ -634,6 +634,60 @@
     return '/api/proxy?url=' + encodeURIComponent(url);
   }
 
+  /* ── Catálogo de piezas del proveedor ────────────────────── */
+  /* Vive en el servidor: la tarifa es la misma para todo el taller y ahí
+     puede pesar lo que quiera sin llenar el navegador. */
+
+  var catalogSources = [];
+
+  function loadCatalogSources() {
+    if (!remote) { catalogSources = []; return Promise.resolve([]); }
+    return api('/catalog/sources').then(function (list) {
+      catalogSources = Array.isArray(list) ? list : [];
+      return catalogSources;
+    }).catch(function () { catalogSources = []; return []; });
+  }
+
+  function catalogPieces() {
+    return catalogSources.reduce(function (sum, s) { return sum + (s.count || 0); }, 0);
+  }
+
+  function searchCatalog(query, limit) {
+    if (!remote || !query) return Promise.resolve([]);
+    return api('/catalog?q=' + encodeURIComponent(query) + '&limit=' + (limit || 30))
+      .then(function (data) { return (data && data.items) || []; })
+      .catch(function () { return []; });
+  }
+
+  function saveCatalogSource(source) {
+    var path = source.id ? '/catalog/sources/' + source.id : '/catalog/sources';
+    return api(path, { method: source.id ? 'PATCH' : 'POST', body: source })
+      .then(function (saved) { return loadCatalogSources().then(function () { return saved; }); });
+  }
+
+  function removeCatalogSource(id) {
+    return api('/catalog/sources/' + id, { method: 'DELETE' })
+      .then(function () { return loadCatalogSources(); });
+  }
+
+  function syncCatalogSource(id) {
+    return api('/catalog/sources/' + id + '/sync', { method: 'POST', body: {} })
+      .then(function (data) { return loadCatalogSources().then(function () { return data; }); });
+  }
+
+  function importCatalogFile(id, file) {
+    return fetch('/api/catalog/sources/' + id + '/import', {
+      method: 'POST',
+      headers: { 'Content-Type': file.type || 'text/csv' },
+      body: file
+    }).then(function (res) {
+      return res.json().then(function (data) {
+        if (!res.ok) throw new Error(data.error || 'No se pudo leer la tarifa');
+        return loadCatalogSources().then(function () { return data; });
+      });
+    });
+  }
+
   function saveShops(list) {
     settings.shops = list;
     if (!remote) { lsSet(SETTINGS_KEY, settings); return Promise.resolve(); }
@@ -720,7 +774,7 @@
       activeId = profiles.some(function (p) { return p.id === saved; }) ? saved : profiles[0].id;
       prefs({ profile: activeId });
       return Promise.all([loadTickets(), loadQuotes(), loadBatches(), loadSettings(),
-                          loadFileCounts()]);
+                          loadFileCounts(), loadCatalogSources()]);
     });
   }
 
@@ -778,6 +832,15 @@
     shops: shops,
     saveShops: saveShops,
     proxyUrl: proxyUrl,
+
+    catalogSources: function () { return catalogSources.slice(); },
+    catalogPieces: catalogPieces,
+    loadCatalogSources: loadCatalogSources,
+    searchCatalog: searchCatalog,
+    saveCatalogSource: saveCatalogSource,
+    removeCatalogSource: removeCatalogSource,
+    syncCatalogSource: syncCatalogSource,
+    importCatalogFile: importCatalogFile,
 
     ticketFiles: ticketFiles,
     filesOf: filesOf,
