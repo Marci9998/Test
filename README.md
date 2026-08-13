@@ -293,6 +293,37 @@ que pagaste.
 > Borrar un lote **no borra los móviles**: se quedan como fichas sueltas con su precio de
 > compra, sólo pierden el enlace al lote.
 
+### Cobrar: del presupuesto a la factura
+
+Pestaña **Facturación**. Cuando el cliente paga, abres su presupuesto y le das a **Cobrar**:
+eliges cómo te ha pagado (efectivo, tarjeta, Bizum, transferencia) y la fecha, y el
+presupuesto se convierte en **factura** con su número. Justo después se abre el diálogo de
+imprimir, que es lo que quieres tener en la mano en ese momento.
+
+La factura lleva su **propia numeración correlativa**, aparte de la de presupuestos:
+`F2026-001`, `F2026-002`… El número se asigna al cobrar y ya no se toca. Si intentas borrar
+una factura te avisa de que eso deja un hueco en la numeración y que lo suyo es una
+rectificativa.
+
+Todo — presupuestos y facturas — se imprime en el papel que quieras:
+
+| | Cuándo |
+|---|---|
+| **Folio A4** | Para dar en mano, mandar por correo o guardar |
+| **Ticket 80 mm** | La impresora de tickets del mostrador |
+| **Ticket 58 mm** | El rollo estrecho |
+
+Se acuerda del último formato que usaste.
+
+Para que la factura salga completa, rellena **Datos → Datos del taller** con tu **NIF** y tu
+dirección, y ponle al cliente su NIF en el presupuesto. Sin el NIF de las dos partes lo que
+sale es una factura simplificada (el «ticket» de toda la vida), que sólo vale hasta cierto
+importe.
+
+> No soy tu gestor: el programa monta el documento y lleva la numeración, pero si facturas
+> en serio confirma con quien te lleve las cuentas qué necesitas incluir y hasta qué importe
+> te vale la simplificada.
+
 ### Presupuestos y PDF
 
 Pestaña **Presupuestos**: papeles para dar al cliente, con su numeración por año

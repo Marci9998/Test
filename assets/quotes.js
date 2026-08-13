@@ -40,6 +40,10 @@
       status: 'borrador',
       createdAt: today,
       validUntil: d.toISOString().slice(0, 10),
+      kind: 'presupuesto',       // o 'factura', cuando se cobra
+      invoiceNumber: '',         // numeración aparte, correlativa y sin saltos
+      issuedAt: '',              // fecha de la factura
+      payMethod: '',             // efectivo, tarjeta, Bizum…
       customer: { name: '', phone: '', email: '', taxId: '', address: '' },
       device: { brand: '', model: '', storage: '', imei: '' },
       issue: '',
@@ -67,6 +71,10 @@
     });
     out.discount = S.num(out.discount);
     out.vatRate = S.num(out.vatRate);
+    out.kind = out.kind === 'factura' ? 'factura' : 'presupuesto';
+    ['invoiceNumber', 'issuedAt', 'payMethod'].forEach(function (k) {
+      out[k] = out[k] == null ? '' : String(out[k]);
+    });
     if (!STATUSES.some(function (s) { return s.id === out.status; })) out.status = 'borrador';
     return out;
   }
@@ -80,6 +88,19 @@
       if (m && m[1] === year) top = Math.max(top, parseInt(m[2], 10));
     });
     return year + '-' + ('00' + (top + 1)).slice(-3);
+  }
+
+  /* Las facturas llevan su propia serie, correlativa y sin saltos:
+     F2026-001, F2026-002… Hacienda no perdona los huecos, así que el
+     número se asigna al cobrar y ya no se toca. */
+  function nextInvoiceNumber() {
+    var year = String(new Date().getFullYear());
+    var top = 0;
+    S.quotes().forEach(function (q) {
+      var m = String(q.invoiceNumber || '').match(/^F(\d{4})-(\d+)$/);
+      if (m && m[1] === year) top = Math.max(top, parseInt(m[2], 10));
+    });
+    return 'F' + year + '-' + ('00' + (top + 1)).slice(-3);
   }
 
   /* ── Cuentas ─────────────────────────────────────────────── */
@@ -126,26 +147,34 @@
     });
 
     el('quote-list').innerHTML = list.map(function (q) {
-      var st = status(q.status);
+      var factura = q.kind === 'factura';
+      var st = factura
+        ? { label: 'Cobrada', color: 'var(--good)', soft: 'var(--good-soft)' }
+        : status(q.status);
       var sums = totals(q);
       var who = (q.customer && q.customer.name) || 'Sin cliente';
       var what = [q.device && q.device.brand, q.device && q.device.model]
         .filter(Boolean).join(' ') || 'Sin equipo';
+      var numero = factura ? (q.invoiceNumber || '—') : (q.number || '—');
 
       return '<article class="ticket" data-quote="' + esc(q.id) + '" ' +
         'style="--st-color:' + st.color + ';--st-soft:' + st.soft + '">' +
         '<div class="ticket-main">' +
-          '<div class="ticket-title">' + esc(q.number || '—') + ' · ' + esc(who) + '</div>' +
+          '<div class="ticket-title">' + (factura ? '🧾 ' : '') +
+            esc(numero) + ' · ' + esc(who) + '</div>' +
           '<div class="ticket-sub">' + esc(what) + (q.issue ? ' — ' + esc(q.issue) : '') + '</div>' +
           '<div class="ticket-meta">' +
-            '<span class="badge">' + esc(st.label) + '</span>' +
-            '<span class="tag">' + esc(U.dateLabel(q.createdAt)) + '</span>' +
+            '<span class="badge">' + (factura ? 'Factura' : esc(st.label)) + '</span>' +
+            '<span class="tag">' + esc(U.dateLabel(factura ? (q.issuedAt || q.createdAt)
+                                                           : q.createdAt)) + '</span>' +
+            (factura && q.payMethod ? '<span class="tag">' + esc(q.payMethod) + '</span>' : '') +
             ((q.lines || []).length ? '<span class="tag">' + q.lines.length + ' línea' +
               (q.lines.length > 1 ? 's' : '') + '</span>' : '') +
           '</div>' +
         '</div>' +
         '<div class="ticket-money">' +
-          '<div class="money-profit">' + esc(S.money(sums.total)) + '</div>' +
+          '<div class="money-profit' + (factura ? ' pos' : '') + '">' +
+            esc(S.money(sums.total)) + '</div>' +
           '<div class="money-sub">' + (S.num(q.vatRate) ? 'IVA incluido' : 'sin IVA') + '</div>' +
         '</div>' +
       '</article>';
@@ -154,8 +183,9 @@
     var empty = el('quote-empty');
     empty.hidden = list.length > 0;
     if (!list.length) {
-      empty.textContent = 'Todavía no hay presupuestos. Dale a «Nuevo presupuesto», ' +
-        'o ábrelo desde una ficha para que se rellene solo.';
+      empty.textContent = 'Todavía no hay nada. Dale a «Nuevo presupuesto», o ábrelo ' +
+        'desde una ficha para que se rellene solo. Cuando cobres, el presupuesto se ' +
+        'convierte en factura con un botón.';
     }
   }
 
@@ -192,7 +222,7 @@
     renderLines();
     renderTotals();
 
-    el('quote-title').textContent = quote ? 'Presupuesto ' + current.number : 'Nuevo presupuesto';
+    applyKind();
     el('quote-from-catalog').hidden = !global.Catalog.ready();
     el('quote-delete').hidden = !quote;
     el('quote-drawer').hidden = false;
@@ -319,31 +349,117 @@
   }
 
   /* ── PDF ─────────────────────────────────────────────────── */
-  function pdf() {
-    var quote = save();
-    if (!quote) return;
+  /* ── Imprimir: A4 o rollo de tickets ─────────────────────── */
+  var printing = null;          // el documento que se va a imprimir
 
+  function openPrint() {
     if (!S.isRemote()) {
       return U.toast('El PDF lo monta el servidor: abre la web por su dirección, no como fichero');
     }
+    var quote = save();
+    if (!quote) return;
 
-    close(true);
+    printing = quote;
+    var factura = quote.kind === 'factura';
+    el('doc-title').textContent = factura
+      ? 'Imprimir factura ' + (quote.invoiceNumber || '')
+      : 'Imprimir presupuesto ' + (quote.number || '');
+    el('doc-hint').textContent = 'Para el rollo de tickets, en el diálogo de imprimir pon ' +
+      'escala 100 % y márgenes «ninguno».';
+
+    check('doc-format', S.prefs().docFormat || 'a4');
+    el('doc-modal').hidden = false;
+  }
+
+  function check(name, value) {
+    Array.prototype.forEach.call(
+      document.querySelectorAll('[name="' + name + '"]'), function (input) {
+        input.checked = input.value === value;
+      });
+  }
+
+  function docUrl() {
+    var input = document.querySelector('[name="doc-format"]:checked');
+    var format = input ? input.value : 'a4';
+    S.prefs({ docFormat: format });
+    return format === 'a4'
+      ? S.quotePdfUrl(printing.id)
+      : S.quoteTicketUrl(printing.id, format);
+  }
+
+  function closePrint() { el('doc-modal').hidden = true; printing = null; }
+
+  function pdf() { openPrint(); }
+
+  /* ── Cobrar: el presupuesto pasa a ser factura ───────────── */
+  function openCharge() {
+    if (!current) return;
+    if (current.kind === 'factura') {
+      return U.toast('Esto ya es la factura ' + current.invoiceNumber);
+    }
+    var quote = sync();
+    if (!quote.lines.length || !totals(quote).total) {
+      return U.toast('Ponle antes lo que le cobras');
+    }
+
+    el('charge-amount').textContent = S.money(totals(quote).total);
+    el('charge-date').value = S.today();
+    el('charge-note').textContent = 'Se le pondrá el número ' + nextInvoiceNumber() +
+      '. Las facturas van correlativas, así que ese número ya no se puede cambiar ' +
+      'ni saltar.';
+    check('charge-pay', 'Efectivo');
+    el('charge-modal').hidden = false;
+  }
+
+  function doCharge() {
+    var pago = document.querySelector('[name="charge-pay"]:checked');
+    var quote = sync();
+    quote.kind = 'factura';
+    quote.invoiceNumber = nextInvoiceNumber();
+    quote.issuedAt = el('charge-date').value || S.today();
+    quote.payMethod = pago ? pago.value : '';
+    quote.status = 'aceptado';
+
+    // el select del formulario también, que si no el siguiente sync()
+    // vuelve a dejarlo en «borrador»
+    el('quote-status').value = 'aceptado';
+    el('charge-modal').hidden = true;
+    S.saveQuote(quote);
+    snapshot = JSON.stringify(current);
+    onChange();
     render();
-    // el navegador se encarga de la descarga; en el móvil se abre el visor
-    var url = S.quotePdfUrl(quote.id);
-    var a = document.createElement('a');
-    a.href = url;
-    a.rel = 'noopener';
-    a.target = '_blank';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    U.toast('PDF generado');
+    applyKind();
+    U.toast('Factura ' + quote.invoiceNumber + ' · ' + S.money(totals(quote).total));
+
+    // lo normal al cobrar es querer el papel en la mano
+    openPrint();
+  }
+
+  /* Deja el editor con la cara que toque: presupuesto o factura */
+  function applyKind() {
+    if (!current) return;
+    var factura = current.kind === 'factura';
+    el('quote-title').textContent = factura
+      ? 'Factura ' + (current.invoiceNumber || '')
+      : (current.number ? 'Presupuesto ' + current.number : 'Nuevo presupuesto');
+    el('quote-charge').hidden = factura;
+    el('quote-print').textContent = factura ? 'Imprimir factura' : 'Imprimir';
+
+    // una factura ya no es un borrador que se apruebe: su número manda
+    el('quote-number-box').hidden = factura;
+    el('quote-status-box').hidden = factura;
+    el('quote-invoice-box').hidden = !factura;
+    setValue('invoiceNumber', current.invoiceNumber);
   }
 
   function remove() {
     if (!current) return;
-    if (!confirm('¿Borrar el presupuesto ' + current.number + '?')) return;
+    if (current.kind === 'factura') {
+      if (!confirm('Vas a borrar la factura ' + current.invoiceNumber + '.\n\n' +
+                   'Una factura emitida no se borra: se hace una rectificativa. Si la ' +
+                   'borras quedará un hueco en la numeración y eso a Hacienda no le vale.\n\n' +
+                   '¿Aun así quieres borrarla?')) return;
+    } else if (!confirm('¿Borrar el presupuesto ' + current.number + '?')) return;
     S.removeQuote(current.id);
     close(true);
     render();
@@ -360,33 +476,57 @@
     el('quote-cancel').addEventListener('click', function () { close(false); });
     el('quote-backdrop').addEventListener('click', function () { close(false); });
     el('quote-delete').addEventListener('click', remove);
-    el('quote-pdf').addEventListener('click', pdf);
+    el('quote-print').addEventListener('click', openPrint);
+    el('quote-charge').addEventListener('click', openCharge);
+
+    el('charge-close').addEventListener('click', function () { el('charge-modal').hidden = true; });
+    el('charge-cancel').addEventListener('click', function () { el('charge-modal').hidden = true; });
+    el('charge-go').addEventListener('click', doCharge);
+    el('charge-modal').addEventListener('click', function (e) {
+      if (e.target === el('charge-modal')) el('charge-modal').hidden = true;
+    });
+
+    el('doc-close').addEventListener('click', closePrint);
+    el('doc-cancel').addEventListener('click', closePrint);
+    el('doc-modal').addEventListener('click', function (e) {
+      if (e.target === el('doc-modal')) closePrint();
+    });
+
+    el('doc-go').addEventListener('click', function () {
+      var url = docUrl();
+      closePrint();
+      S.quotesSaved().then(function () {
+        var win = global.open(url, '_blank');
+        if (!win) return U.toast('El navegador ha bloqueado la ventana. Prueba con «Descargar».');
+        try { win.addEventListener('load', function () { win.print(); }); } catch (err) { /* da igual */ }
+      });
+    });
+
+    el('doc-download').addEventListener('click', function () {
+      var url = docUrl();
+      closePrint();
+      S.quotesSaved().then(function () {
+        var a = document.createElement('a');
+        a.href = url + (url.indexOf('?') > -1 ? '&' : '?') + 'download=1';
+        a.rel = 'noopener';
+        a.target = '_blank';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      });
+    });
 
     el('quote-save').addEventListener('click', function () {
-      if (!save()) return;
+      var quote = save();
+      if (!quote) return;
       close(true);
       render();
-      U.toast('Presupuesto guardado');
+      U.toast(quote.kind === 'factura' ? 'Factura guardada' : 'Presupuesto guardado');
     });
 
     el('quote-list').addEventListener('click', function (e) {
       var card = e.target.closest('[data-quote]');
       if (card) open(S.quote(card.dataset.quote));
-    });
-
-    /* El mismo presupuesto, pero en el rollo de papel térmico */
-    el('quote-ticket').addEventListener('click', function () {
-      if (!S.isRemote()) return U.toast('El ticket necesita el servidor');
-      var quote = save();
-      if (!quote) return;
-      // hay que esperar a que el servidor lo tenga: si no, uno recién
-      // creado devuelve «No existe ese presupuesto» en la pestaña nueva
-      S.quotesSaved().then(function () {
-        var url = S.quoteTicketUrl(quote.id, S.prefs().printWidth || '80');
-        var win = global.open(url, '_blank');
-        if (!win) return U.toast('El navegador ha bloqueado la ventana.');
-        try { win.addEventListener('load', function () { win.print(); }); } catch (err) { /* da igual */ }
-      });
     });
 
     el('quote-add-line').addEventListener('click', function () {

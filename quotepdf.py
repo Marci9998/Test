@@ -74,7 +74,9 @@ def build(quote, business, profile_name='', attachments=None):
     business = business or {}
     sums = totals(quote)
 
-    title = 'Presupuesto %s' % _txt(quote.get('number') or '')
+    factura = quote.get('kind') == 'factura'
+    numero = _txt(quote.get('invoiceNumber') if factura else quote.get('number')) or ''
+    title = ('Factura %s' if factura else 'Presupuesto %s') % numero
     pdf = Pdf(title=title)
 
     y = _header(pdf, quote, business, profile_name)
@@ -84,7 +86,7 @@ def build(quote, business, profile_name='', attachments=None):
     y = _totals(pdf, sums, y)
     y = _notes(pdf, quote, business, y)
     _attachments(pdf, attachments)
-    _footer(pdf, business)
+    _footer(pdf, business, quote)
 
     return pdf.build()
 
@@ -113,13 +115,21 @@ def _header(pdf, quote, business, profile_name):
 
     # bloque del número, a la derecha
     right = PAGE_W - MARGIN
-    pdf.text(right, PAGE_H - 52, 'PRESUPUESTO', size=10, bold=True,
+    factura = quote.get('kind') == 'factura'
+    numero = _txt(quote.get('invoiceNumber') if factura else quote.get('number'))
+    pdf.text(right, PAGE_H - 52, 'FACTURA' if factura else 'PRESUPUESTO', size=10, bold=True,
              color=(.85, .89, 1), align='right')
-    pdf.text(right, PAGE_H - 76, _txt(quote.get('number')) or '—', size=19, bold=True,
+    pdf.text(right, PAGE_H - 76, numero or '—', size=19, bold=True,
              color=WHITE, align='right')
-    pdf.text(right, PAGE_H - 96, nice_date(quote.get('createdAt')), size=9,
+    pdf.text(right, PAGE_H - 96,
+             nice_date(quote.get('issuedAt') or quote.get('createdAt')), size=9,
              color=(.85, .89, 1), align='right')
-    if _txt(quote.get('validUntil')):
+    if factura:
+        forma = _txt(quote.get('payMethod'))
+        if forma:
+            pdf.text(right, PAGE_H - 110, 'Pagado con ' + forma,
+                     size=8.5, color=(.82, .87, 1), align='right')
+    elif _txt(quote.get('validUntil')):
         pdf.text(right, PAGE_H - 110, 'Válido hasta el ' + nice_date(quote.get('validUntil')),
                  size=8.5, color=(.82, .87, 1), align='right')
 
@@ -270,10 +280,15 @@ def _notes(pdf, quote, business, y):
         blocks.append(('Notas', _txt(quote.get('notes'))))
 
 
-    terms = _txt(business.get('terms')) or (
-        'Presupuesto sin compromiso. La reparación no empieza hasta que lo apruebes. '
-        'Puede haber averías que sólo se ven al abrir el equipo: si aparece algo más, '
-        'te aviso antes de seguir.')
+    if quote.get('kind') == 'factura':
+        terms = _txt(business.get('terms')) or (
+            'Gracias por confiar en nosotros. Conserva esta factura: hace falta para '
+            'cualquier reclamación o para la garantía de la reparación.')
+    else:
+        terms = _txt(business.get('terms')) or (
+            'Presupuesto sin compromiso. La reparación no empieza hasta que lo apruebes. '
+            'Puede haber averías que sólo se ven al abrir el equipo: si aparece algo más, '
+            'te aviso antes de seguir.')
     blocks.append(('Condiciones', terms))
 
     for label, body in blocks:
@@ -311,7 +326,7 @@ def _attachments(pdf, attachments):
     pdf.rect(MARGIN, 118, CONTENT_W, top - 118, BAND, radius=6)
 
     y = top - 20
-    pdf.text(MARGIN + 14, y, 'SE ENTREGA CON ESTE PRESUPUESTO', size=8, bold=True, color=FAINT)
+    pdf.text(MARGIN + 14, y, 'SE ENTREGA CON ESTE DOCUMENTO', size=8, bold=True, color=FAINT)
     y -= 16
 
     for item in items:
@@ -330,15 +345,27 @@ def _attachments(pdf, attachments):
         y -= 15
 
 
-def _footer(pdf, business):
-    """Pie de todas las páginas, con hueco para la firma."""
+def _footer(pdf, business, quote=None):
+    """Pie de la última página.
+
+    En un presupuesto va el hueco de la firma, que es lo que se le pide al
+    cliente para aprobarlo. En una factura ya cobrada eso no pinta nada: en
+    su sitio se pone cómo pagó.
+    """
+    factura = (quote or {}).get('kind') == 'factura'
+
     for index in range(len(pdf.pages) + 1):
         if index < len(pdf.pages):
             continue                       # el pie se pinta sólo en la última
         pdf.line(MARGIN, 96, PAGE_W - MARGIN, 96, LINE, 0.8)
 
-        pdf.text(MARGIN, 78, 'Conforme (firma del cliente)', size=8, color=FAINT)
-        pdf.line(MARGIN, 52, MARGIN + 190, 52, (.8, .83, .88), 0.8)
+        if factura:
+            forma = _txt((quote or {}).get('payMethod'))
+            pdf.text(MARGIN, 78, 'PAGADO' + (' · ' + forma if forma else ''),
+                     size=9, bold=True, color=(.07, .5, .36))
+        else:
+            pdf.text(MARGIN, 78, 'Conforme (firma del cliente)', size=8, color=FAINT)
+            pdf.line(MARGIN, 52, MARGIN + 190, 52, (.8, .83, .88), 0.8)
 
         closing = _txt(business.get('footer')) or 'Gracias por confiar en el taller.'
         pdf.text(PAGE_W - MARGIN, 78, closing, size=8.5, color=SOFT, align='right')

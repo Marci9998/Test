@@ -714,6 +714,8 @@
       // sólo se cierra lo más de arriba, nunca dos cosas de un tecleo
       if (e.key === 'Escape') {
         if (!el('print-modal').hidden) el('print-modal').hidden = true;
+        else if (!el('charge-modal').hidden) el('charge-modal').hidden = true;
+        else if (!el('doc-modal').hidden) el('doc-modal').hidden = true;
         else if (!el('csv-modal').hidden) el('csv-modal').hidden = true;
         else if (!el('profile-modal').hidden) closeProfileModal();
         else if (!el('account-modal').hidden) closeAccountModal();

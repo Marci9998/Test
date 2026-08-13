@@ -289,9 +289,16 @@ def build_quote(quote, business=None, profile_name='', width='80'):
     t.space(4)
     t.rule()
 
-    t.text('PRESUPUESTO', size=9.5, bold=True, align='center', gap=3)
-    t.pair('N.º ' + str(quote.get('number') or ''), _date(quote.get('createdAt')), size=8)
-    if quote.get('validUntil'):
+    factura = quote.get('kind') == 'factura'
+    numero = str((quote.get('invoiceNumber') if factura else quote.get('number')) or '')
+
+    t.text('FACTURA' if factura else 'PRESUPUESTO', size=9.5, bold=True,
+           align='center', gap=3)
+    t.pair('N.º ' + numero,
+           _date(quote.get('issuedAt') if factura else quote.get('createdAt')), size=8)
+    if factura and quote.get('payMethod'):
+        t.pair('Forma de pago', str(quote['payMethod']), size=7.5, color=GREY)
+    elif not factura and quote.get('validUntil'):
         t.pair('Válido hasta', _date(quote['validUntil']), size=7.5, color=GREY)
     t.rule()
 
@@ -344,6 +351,9 @@ def build_quote(quote, business=None, profile_name='', width='80'):
     t.pair('TOTAL', _money(neto + iva), size=11 if ancho >= 70 else 9.5, bold=True, gap=3)
     t.rule()
 
+    if factura:
+        t.text('PAGADO' + (' · ' + str(quote['payMethod']) if quote.get('payMethod') else ''),
+               size=9, bold=True, align='center', gap=2.6)
     if _num(quote.get('vatRate')):
         t.text('IVA incluido.', size=7.5, align='center', color=GREY, gap=2.2)
 
@@ -360,7 +370,7 @@ def build_quote(quote, business=None, profile_name='', width='80'):
     t.space(4)
     t.text(time.strftime('%d/%m/%Y %H:%M'), size=6.5, align='center', color=GREY, gap=1.2)
 
-    return t.build('Presupuesto %s' % (quote.get('number') or ''))
+    return t.build(('Factura %s' if factura else 'Presupuesto %s') % numero)
 
 
 def _num(value):

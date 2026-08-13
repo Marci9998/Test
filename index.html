@@ -112,7 +112,7 @@
   <button class="tab is-active" role="tab" data-view="panel">Panel</button>
   <button class="tab" role="tab" data-view="fichas">Fichas</button>
   <button class="tab" role="tab" data-view="lotes">Lotes</button>
-  <button class="tab" role="tab" data-view="presupuestos">Presupuestos</button>
+  <button class="tab" role="tab" data-view="presupuestos">Facturación</button>
   <button class="tab" role="tab" data-view="datos">Datos</button>
 </nav>
 
@@ -185,8 +185,9 @@
   <section id="view-presupuestos" class="view">
     <div class="filters">
       <p class="hint" style="flex:1;margin:0">
-        Presupuestos para dar al cliente. Se pueden sacar de una ficha con el botón
-        <b>Presupuesto</b> que hay dentro de cada una.
+        Presupuestos y facturas. El presupuesto se saca de una ficha con el botón
+        <b>Presupuesto</b>; cuando el cliente paga, le das a <b>Cobrar</b> y se convierte
+        en factura con su número. Todo se imprime en folio A4 o en el rollo de tickets.
       </p>
       <button class="btn btn-primary" id="quote-new">+ Nuevo presupuesto</button>
     </div>
@@ -575,10 +576,13 @@
     <fieldset>
       <legend>El papel</legend>
       <div class="grid-2">
-        <label>Número
+        <label id="quote-number-box">Número
           <input name="number" placeholder="2026-001">
         </label>
-        <label>Estado
+        <label id="quote-invoice-box" hidden>N.º de factura
+          <input name="invoiceNumber" readonly>
+        </label>
+        <label id="quote-status-box">Estado
           <select id="quote-status"></select>
         </label>
         <label>Fecha
@@ -660,14 +664,90 @@
 
   <footer class="drawer-foot">
     <button class="btn btn-danger-ghost" id="quote-delete" type="button" hidden>Borrar</button>
+    <button class="btn btn-primary" id="quote-charge" type="button"
+            title="Convertirlo en factura y cobrarlo">Cobrar</button>
     <span class="spacer"></span>
     <button class="btn" id="quote-cancel" type="button">Cancelar</button>
-    <button class="btn" id="quote-ticket" type="button"
-            title="Imprimirlo en la impresora de papel térmico">Ticket</button>
-    <button class="btn" id="quote-pdf" type="button">PDF</button>
+    <button class="btn" id="quote-print" type="button"
+            title="Imprimir en A4 o en la impresora de tickets">Imprimir</button>
     <button class="btn btn-primary" id="quote-save" type="button">Guardar</button>
   </footer>
 </aside>
+
+<!-- ─────────────── COBRAR: PASAR A FACTURA ─────────────── -->
+<div id="charge-modal" class="modal" hidden>
+  <div class="modal-card">
+    <header class="card-head">
+      <h2>Cobrar</h2>
+      <button class="icon-btn" id="charge-close" aria-label="Cerrar">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.4 5 5 6.4 10.6 12 5 17.6 6.4 19 12 13.4 17.6 19 19 17.6 13.4 12 19 6.4 17.6 5 12 10.6 6.4 5Z"/></svg>
+      </button>
+    </header>
+
+    <div class="modal-body">
+      <p class="charge-total">Se le cobran <b id="charge-amount">—</b></p>
+
+      <fieldset class="print-group">
+        <legend>Cómo te paga</legend>
+        <div class="pay-grid" id="charge-methods">
+          <label class="print-opt"><input type="radio" name="charge-pay" value="Efectivo" checked><span><b>Efectivo</b></span></label>
+          <label class="print-opt"><input type="radio" name="charge-pay" value="Tarjeta"><span><b>Tarjeta</b></span></label>
+          <label class="print-opt"><input type="radio" name="charge-pay" value="Bizum"><span><b>Bizum</b></span></label>
+          <label class="print-opt"><input type="radio" name="charge-pay" value="Transferencia"><span><b>Transferencia</b></span></label>
+        </div>
+      </fieldset>
+
+      <label>Fecha de la factura
+        <input type="date" id="charge-date">
+      </label>
+
+      <p class="hint" id="charge-note"></p>
+    </div>
+
+    <footer class="modal-foot">
+      <button class="btn" id="charge-cancel" type="button">Cancelar</button>
+      <button class="btn btn-primary" id="charge-go" type="button">Cobrar y facturar</button>
+    </footer>
+  </div>
+</div>
+
+<!-- ─────────────── IMPRIMIR EL PRESUPUESTO O LA FACTURA ─────────────── -->
+<div id="doc-modal" class="modal" hidden>
+  <div class="modal-card">
+    <header class="card-head">
+      <h2 id="doc-title">Imprimir</h2>
+      <button class="icon-btn" id="doc-close" aria-label="Cerrar">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.4 5 5 6.4 10.6 12 5 17.6 6.4 19 12 13.4 17.6 19 19 17.6 13.4 12 19 6.4 17.6 5 12 10.6 6.4 5Z"/></svg>
+      </button>
+    </header>
+
+    <div class="modal-body">
+      <fieldset class="print-group">
+        <legend>En qué papel</legend>
+        <label class="print-opt">
+          <input type="radio" name="doc-format" value="a4" checked>
+          <span><b>Folio A4</b><small>El de siempre, con la cabecera de tu taller. Para dar en mano o mandar por correo</small></span>
+        </label>
+        <label class="print-opt">
+          <input type="radio" name="doc-format" value="80">
+          <span><b>Ticket 80 mm</b><small>La impresora de tickets del mostrador</small></span>
+        </label>
+        <label class="print-opt">
+          <input type="radio" name="doc-format" value="58">
+          <span><b>Ticket 58 mm</b><small>El rollo estrecho</small></span>
+        </label>
+      </fieldset>
+
+      <p class="hint" id="doc-hint"></p>
+    </div>
+
+    <footer class="modal-foot">
+      <button class="btn" id="doc-cancel" type="button">Cancelar</button>
+      <button class="btn" id="doc-download" type="button">Descargar</button>
+      <button class="btn btn-primary" id="doc-go" type="button">Imprimir</button>
+    </footer>
+  </div>
+</div>
 
 <!-- ─────────────── IMPRIMIR EN PAPEL TÉRMICO ─────────────── -->
 <div id="print-modal" class="modal" hidden>

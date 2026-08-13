@@ -903,7 +903,10 @@ class Handler(BaseHTTPRequestHandler):
                 sys.stderr.write('Error montando el ticket: %r\n' % (err,))
                 return self._error(500, 'No se pudo montar el ticket')
 
-            name = 'presupuesto-%s-ticket.pdf' % (quote.get('number') or quote.get('id'))
+            factura = quote.get('kind') == 'factura'
+            name = '%s-%s-ticket.pdf' % ('factura' if factura else 'presupuesto',
+                                         (quote.get('invoiceNumber') if factura
+                                          else quote.get('number')) or quote.get('id'))
             como = 'attachment' if (params.get('download') or [''])[0] else 'inline'
             return self._send(200, data, 'application/pdf',
                               {'Content-Disposition': disposition(como, name)})
@@ -929,9 +932,14 @@ class Handler(BaseHTTPRequestHandler):
                 sys.stderr.write('Error montando el PDF: %r\n' % (err,))
                 return self._error(500, 'No se pudo montar el PDF')
 
-            name = 'presupuesto-%s.pdf' % (quote.get('number') or quote.get('id'))
+            factura = quote.get('kind') == 'factura'
+            name = '%s-%s.pdf' % ('factura' if factura else 'presupuesto',
+                                  (quote.get('invoiceNumber') if factura else quote.get('number'))
+                                  or quote.get('id'))
+            params = parse_qs(urlparse(self.path).query)
+            como = 'attachment' if (params.get('download') or [''])[0] else 'inline'
             return self._send(200, data, 'application/pdf',
-                              {'Content-Disposition': disposition('attachment', name)})
+                              {'Content-Disposition': disposition(como, name)})
 
         # — catálogo de piezas del proveedor —
 
