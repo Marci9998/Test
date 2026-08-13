@@ -943,6 +943,20 @@ class Handler(BaseHTTPRequestHandler):
 
         # — catálogo de piezas del proveedor —
 
+        # el QR de cobro, para enseñárselo al cliente en pantalla
+        if parts == ['qr'] and method == 'GET':
+            params = parse_qs(urlparse(self.path).query)
+            data = (params.get('data') or [''])[0]
+            if not data:
+                return self._error(400, 'Falta qué meter en el QR')
+            try:
+                import qrcode
+                body = qrcode.svg(data, scale=int((params.get('scale') or ['6'])[0]))
+            except ValueError as err:
+                return self._error(400, str(err))
+            return self._send(200, body.encode('utf-8'), 'image/svg+xml',
+                              {'Cache-Control': 'max-age=3600'})
+
         if parts == ['catalog'] and method == 'GET':
             params = parse_qs(urlparse(self.path).query)
             query = (params.get('q') or [''])[0]

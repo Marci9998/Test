@@ -289,6 +289,43 @@
       </div>
     </article>
 
+    <article class="card" id="pay-card">
+      <header class="card-head">
+        <h2>Cobro con QR</h2>
+        <small id="pay-state"></small>
+      </header>
+      <p class="hint">
+        Al cobrar puedes enseñarle al cliente un QR en la pantalla: lo escanea con su móvil,
+        le sale tu página de pago <b>con el importe ya puesto</b> y paga desde ahí. No hace
+        falta datáfono ni que la app toque su dinero.
+      </p>
+
+      <form id="pay-form" class="grid-2">
+        <label>Dónde cobras
+          <select name="provider">
+            <option value="paypal">PayPal.Me</option>
+            <option value="custom">Otro enlace mío</option>
+          </select>
+        </label>
+        <label id="pay-user-box">Tu usuario de PayPal.Me
+          <input name="user" placeholder="tallerdemarci" autocapitalize="none" spellcheck="false">
+        </label>
+        <label id="pay-url-box" class="wide" hidden>Enlace de cobro
+          <input name="url" placeholder="https://mi-tienda.com/pagar?importe={importe}"
+                 autocapitalize="none" spellcheck="false">
+        </label>
+      </form>
+
+      <p class="hint" id="pay-help"></p>
+      <div id="pay-preview" class="pay-preview" hidden>
+        <div id="pay-preview-qr"></div>
+        <div>
+          <b>Así lo verá el cliente</b>
+          <small id="pay-preview-url"></small>
+        </div>
+      </div>
+    </article>
+
     <article class="card" id="catalog-card">
       <header class="card-head">
         <h2>Tarifas de proveedor</h2>
@@ -694,6 +731,7 @@
           <label class="print-opt"><input type="radio" name="charge-pay" value="Tarjeta"><span><b>Tarjeta</b></span></label>
           <label class="print-opt"><input type="radio" name="charge-pay" value="Bizum"><span><b>Bizum</b></span></label>
           <label class="print-opt"><input type="radio" name="charge-pay" value="Transferencia"><span><b>Transferencia</b></span></label>
+          <label class="print-opt" id="charge-pay-link" hidden><input type="radio" name="charge-pay" value="PayPal"><span><b id="charge-pay-link-label">PayPal</b></span></label>
         </div>
       </fieldset>
 
@@ -701,11 +739,18 @@
         <input type="date" id="charge-date">
       </label>
 
+      <div id="charge-qr" class="charge-qr" hidden>
+        <div id="charge-qr-img"></div>
+        <p class="hint" style="margin:8px 0 0">Que lo escanee con la cámara del móvil.
+          Le sale tu página de pago con el importe puesto.</p>
+      </div>
+
       <p class="hint" id="charge-note"></p>
     </div>
 
     <footer class="modal-foot">
       <button class="btn" id="charge-cancel" type="button">Cancelar</button>
+      <button class="btn" id="charge-show-qr" type="button" hidden>Enseñar QR</button>
       <button class="btn btn-primary" id="charge-go" type="button">Cobrar y facturar</button>
     </footer>
   </div>

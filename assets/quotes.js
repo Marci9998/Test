@@ -402,8 +402,24 @@
       return U.toast('Ponle antes lo que le cobras');
     }
 
-    el('charge-amount').textContent = S.money(totals(quote).total);
+    var total = totals(quote).total;
+    el('charge-amount').textContent = S.money(total);
     el('charge-date').value = S.today();
+
+    // si tiene enlace de cobro, se le puede enseñar el QR al cliente
+    var enlace = S.payUrl(total);
+    var conQr = !!enlace && S.isRemote();
+    el('charge-show-qr').hidden = !conQr;
+
+    // si cobra por QR, que la forma de pago quede puesta sin tener que pensar
+    el('charge-pay-link').hidden = !conQr;
+    el('charge-pay-link-label').textContent =
+      S.payment().provider === 'custom' ? 'Enlace de pago' : 'PayPal';
+    el('charge-qr').hidden = true;
+    el('charge-qr-img').innerHTML = enlace && S.isRemote()
+      ? '<img alt="QR para pagar" width="208" height="208" src="' +
+        esc(S.qrUrl(enlace, 7)) + '">'
+      : '';
     el('charge-note').textContent = 'Se le pondrá el número ' + nextInvoiceNumber() +
       '. Las facturas van correlativas, así que ese número ya no se puede cambiar ' +
       'ni saltar.';
@@ -482,6 +498,16 @@
     el('charge-close').addEventListener('click', function () { el('charge-modal').hidden = true; });
     el('charge-cancel').addEventListener('click', function () { el('charge-modal').hidden = true; });
     el('charge-go').addEventListener('click', doCharge);
+
+    el('charge-show-qr').addEventListener('click', function () {
+      var qr = el('charge-qr');
+      qr.hidden = !qr.hidden;
+      el('charge-show-qr').textContent = qr.hidden ? 'Enseñar QR' : 'Ocultar QR';
+      if (!qr.hidden) {
+        var opcion = document.querySelector('#charge-pay-link input');
+        if (opcion) opcion.checked = true;
+      }
+    });
     el('charge-modal').addEventListener('click', function (e) {
       if (e.target === el('charge-modal')) el('charge-modal').hidden = true;
     });

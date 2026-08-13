@@ -609,6 +609,47 @@
     });
   }
 
+  /* ── Cobro con QR ────────────────────────────────────────── */
+  /* No se cobra desde aquí: se le enseña al cliente un enlace de pago
+     tuyo con el importe puesto, y él paga desde su móvil. La aplicación
+     no toca dinero ni guarda nada de su tarjeta. */
+
+  function payment() { return settings.payment || { provider: 'paypal', user: '', url: '' }; }
+
+  function savePayment(data) {
+    settings.payment = data;
+    if (!remote) { lsSet(SETTINGS_KEY, settings); return Promise.resolve(); }
+    return api('/settings', { method: 'PUT', body: settings }).catch(function (err) {
+      onError('No se pudieron guardar los datos de cobro: ' + err.message);
+    });
+  }
+
+  /* El enlace de pago para un importe. Devuelve '' si no está configurado. */
+  function payUrl(amount) {
+    var pay = payment();
+    var total = Math.max(0, num(amount));
+    // PayPal.Me quiere el importe con punto y dos decimales
+    var texto = total.toFixed(2);
+
+    if (pay.provider === 'custom') {
+      if (!pay.url) return '';
+      return String(pay.url)
+        .replace(/\{importe\}/g, encodeURIComponent(texto))
+        .replace(/\{amount\}/g, encodeURIComponent(texto));
+    }
+
+    var user = String(pay.user || '').trim().replace(/^@/, '');
+    // por si pega la dirección entera en vez del usuario
+    user = user.replace(/^https?:\/\/(www\.)?paypal\.me\//i, '').replace(/\/.*$/, '');
+    if (!user) return '';
+    return 'https://paypal.me/' + encodeURIComponent(user) + '/' + texto + 'EUR';
+  }
+
+  function qrUrl(data, scale) {
+    return '/api/qr?data=' + encodeURIComponent(data) +
+           (scale ? '&scale=' + scale : '');
+  }
+
   /* ── Preferencias del dispositivo (tema, pestaña, perfil) ── */
   function prefs(patch) {
     var current = lsGet(PREFS_KEY, {}) || {};
@@ -889,6 +930,11 @@
     saveQuote: saveQuote,
     removeQuote: removeQuote,
     quotePdfUrl: quotePdfUrl,
+
+    payment: payment,
+    savePayment: savePayment,
+    payUrl: payUrl,
+    qrUrl: qrUrl,
     business: business,
     saveBusiness: saveBusiness,
 

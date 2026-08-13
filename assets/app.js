@@ -680,8 +680,9 @@
       U.toast('Tiendas restauradas');
     });
 
-    /* Imprimir y tarifas de proveedor */
+    /* Imprimir, cobro con QR y tarifas de proveedor */
     wirePrint();
+    wirePay();
     wireCatalog();
 
     /* Datos */
@@ -1030,6 +1031,67 @@
     });
   }
 
+  /* ── Cobro con QR ────────────────────────────────────────── */
+  /* Aquí no se cobra nada: se le enseña al cliente tu enlace de pago con
+     el importe puesto y él paga desde su móvil. La aplicación nunca ve
+     su tarjeta ni mueve dinero. */
+
+  function renderPayCard() {
+    var card = el('pay-card');
+    if (!card) return;
+
+    var pay = S.payment();
+    var form = el('pay-form');
+    form.querySelector('[name="provider"]').value = pay.provider || 'paypal';
+    form.querySelector('[name="user"]').value = pay.user || '';
+    form.querySelector('[name="url"]').value = pay.url || '';
+
+    var custom = (pay.provider === 'custom');
+    el('pay-user-box').hidden = custom;
+    el('pay-url-box').hidden = !custom;
+
+    el('pay-help').innerHTML = custom
+      ? 'Pon tu enlace de cobro y escribe <code>{importe}</code> donde vaya la cantidad. ' +
+        'Vale cualquiera que acepte el importe en la dirección.'
+      : 'Es el nombre que sale al final de tu enlace: <code>paypal.me/<b>loquesea</b></code>. ' +
+        'Si no lo tienes, se crea gratis en paypal.com/paypalme.';
+
+    var ejemplo = S.payUrl(10);
+    var preview = el('pay-preview');
+    preview.hidden = !ejemplo || !S.isRemote();
+    el('pay-state').textContent = ejemplo ? 'listo' : 'sin configurar';
+
+    if (!preview.hidden) {
+      el('pay-preview-qr').innerHTML = '<img alt="Ejemplo de QR de cobro" width="132" height="132" src="' +
+        U.esc(S.qrUrl(ejemplo, 4)) + '">';
+      el('pay-preview-url').textContent = ejemplo + '  (ejemplo con 10 €)';
+    }
+  }
+
+  function wirePay() {
+    var form = el('pay-form');
+    if (!form) return;
+
+    function guardar() {
+      S.savePayment({
+        provider: form.querySelector('[name="provider"]').value,
+        user: form.querySelector('[name="user"]').value.trim(),
+        url: form.querySelector('[name="url"]').value.trim()
+      });
+      renderPayCard();
+    }
+
+    form.addEventListener('change', guardar);
+    form.addEventListener('submit', function (e) { e.preventDefault(); });
+    // el usuario se escribe letra a letra: se repinta al vuelo pero sin
+    // machacar el servidor en cada tecla
+    var timer = null;
+    form.addEventListener('input', function () {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(guardar, 500);
+    });
+  }
+
   /* ── Tarifas de proveedor ────────────────────────────────── */
   function sourceForm(row) {
     function val(cls) {
@@ -1147,6 +1209,7 @@
     refresh();
     U.renderShopSettings();
     U.renderCatalogSources();
+    renderPayCard();
     U.renderStorageInfo();
     renderAccount();
 

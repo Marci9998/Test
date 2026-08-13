@@ -293,6 +293,30 @@ que pagaste.
 > Borrar un lote **no borra los móviles**: se quedan como fichas sueltas con su precio de
 > compra, sólo pierden el enlace al lote.
 
+### Cobrar con QR
+
+**Datos → Cobro con QR**. Pones tu usuario de **PayPal.Me** (o cualquier enlace de cobro
+tuyo, escribiendo `{importe}` donde vaya la cantidad) y al cobrar aparece un botón
+**Enseñar QR**: se lo pones delante al cliente, lo escanea con la cámara del móvil y le sale
+tu página de pago **con el importe ya puesto**.
+
+Que quede claro qué hace y qué no:
+
+- **La aplicación no cobra nada ni toca dinero.** Sólo pinta un QR con tu enlace. El pago va
+  entre el cliente y PayPal (o quien uses); aquí no se ve ni se guarda nada de su tarjeta.
+- **Bizum y las demás formas de pago son sólo la etiqueta** de cómo te pagaron, para que
+  salga en la factura y sepas luego qué entró por dónde.
+- Al enseñar el QR, la forma de pago se marca sola.
+
+El QR se genera en tu propio servidor (`qrcode.py`, escrito a mano y sin librerías), así que
+no se manda a ningún sitio de fuera lo que cobras ni a quién.
+
+> **Si quieres cobrar con tarjeta acercándola al móvil** (Tap to Pay), eso no lo puede hacer
+> esta aplicación: el cobro lo tiene que llevar una entidad de pago autorizada. En España lo
+> tienen SumUp y Revolut, entre otros: te das de alta con ellos, instalas su app y cobras
+> con el iPhone o el Android sin datáfono. Esto de aquí es la alternativa que funciona hoy
+> sin darte de alta en nada nuevo.
+
 ### Cobrar: del presupuesto a la factura
 
 Pestaña **Facturación**. Cuando el cliente paga, abres su presupuesto y le das a **Cobrar**:
